@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "*/5 * * * *"   # every 5 minutes
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/fetch_market_data.py"
+      - ".github/workflows/fetch_market_data.yml"
 
 permissions:
   contents: write

@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "*/15 * * * *"   # every 15 minutes
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/fetch_klines.py"
+      - ".github/workflows/fetch_klines.yml"
 
 permissions:
   contents: write
