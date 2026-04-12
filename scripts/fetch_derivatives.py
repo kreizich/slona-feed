@@ -5,7 +5,9 @@ Appends to history JSON files.
 """
 import json
 import os
+import sys
 import time
+import traceback
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
@@ -15,16 +17,25 @@ FAPI_BASE = "https://fapi.binance.com"
 MAX_ENTRIES = 2016  # ~7 days at 5-min intervals
 
 
-def fetch(url, timeout=15):
+def fetch(url, timeout=20):
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "slona-feed/1.0"})
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; slona-feed/1.0)",
+            "Accept": "application/json",
+        })
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
-        print(f"HTTP {e.code} for {url}: {e.reason}")
+        body = ""
+        try:
+            body = e.read().decode()[:200]
+        except Exception:
+            pass
+        print(f"[ERROR] HTTP {e.code} {e.reason} — {url}\n        body: {body}", flush=True)
         return None
     except Exception as e:
-        print(f"Error fetching {url}: {e}")
+        print(f"[ERROR] {type(e).__name__}: {e} — {url}", flush=True)
+        traceback.print_exc()
         return None
 
 
@@ -166,30 +177,34 @@ def main():
     now = datetime.now(timezone.utc)
     ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     unix_ts = int(now.timestamp())
-    print(f"[{ts}] Fetching derivatives data...")
+    print(f"[{ts}] Fetching derivatives data...", flush=True)
 
     os.makedirs("data", exist_ok=True)
 
     premium = fetch_premium_index()
-    print(f"  Premium index: {len(premium)} symbols")
+    print(f"  Premium index: {len(premium)} symbols", flush=True)
+
+    if not premium:
+        print("[FATAL] No futures data — fapi.binance.com unreachable.", flush=True)
+        sys.exit(1)
 
     oi = fetch_open_interest_spot()
-    print(f"  Open interest: {len(oi)} symbols")
+    print(f"  Open interest: {len(oi)} symbols", flush=True)
 
     oi_hist = fetch_open_interest_hist()
-    print(f"  OI hist: {len(oi_hist)} symbols")
+    print(f"  OI hist: {len(oi_hist)} symbols", flush=True)
 
     ls = fetch_long_short()
-    print(f"  L/S ratio: {len(ls)} symbols")
+    print(f"  L/S ratio: {len(ls)} symbols", flush=True)
 
     top_trader = fetch_top_trader_ratio()
-    print(f"  Top trader ratio: {len(top_trader)} symbols")
+    print(f"  Top trader ratio: {len(top_trader)} symbols", flush=True)
 
     taker = fetch_taker_ratio()
-    print(f"  Taker ratio: {len(taker)} symbols")
+    print(f"  Taker ratio: {len(taker)} symbols", flush=True)
 
     funding_hist = fetch_funding_history()
-    print(f"  Funding history: {len(funding_hist)} symbols")
+    print(f"  Funding history: {len(funding_hist)} symbols", flush=True)
 
     # Append to time-series files
     append_ts("data/funding_rates.json", {

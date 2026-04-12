@@ -6,13 +6,20 @@ Also patches klines section into data/latest.json
 """
 import json
 import os
+import sys
 import time
+import traceback
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
 SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
-SPOT_BASE = "https://api.binance.com"
+SPOT_BASES = [
+    "https://api.binance.com",
+    "https://api1.binance.com",
+    "https://api2.binance.com",
+    "https://api3.binance.com",
+]
 FAPI_BASE = "https://fapi.binance.com"
 
 # interval -> (limit, source)
@@ -26,16 +33,25 @@ INTERVALS = {
 }
 
 
-def fetch(url, timeout=15):
+def fetch(url, timeout=20):
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "slona-feed/1.0"})
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; slona-feed/1.0)",
+            "Accept": "application/json",
+        })
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
-        print(f"HTTP {e.code} for {url}: {e.reason}")
+        body = ""
+        try:
+            body = e.read().decode()[:200]
+        except Exception:
+            pass
+        print(f"[ERROR] HTTP {e.code} {e.reason} — {url}\n        body: {body}", flush=True)
         return None
     except Exception as e:
-        print(f"Error fetching {url}: {e}")
+        print(f"[ERROR] {type(e).__name__}: {e} — {url}", flush=True)
+        traceback.print_exc()
         return None
 
 
@@ -44,26 +60,28 @@ def parse_klines(raw):
     result = []
     for k in raw:
         result.append({
-            "t": k[0],   # open time ms
-            "o": k[1],   # open
-            "h": k[2],   # high
-            "l": k[3],   # low
-            "c": k[4],   # close
-            "v": k[5],   # volume
-            "T": k[6],   # close time ms
-            "qv": k[7],  # quote volume
-            "n": k[8],   # trades
-            "tbv": k[9], # taker buy base vol
-            "tqv": k[10],# taker buy quote vol
+            "t": k[0],    # open time ms
+            "o": k[1],    # open
+            "h": k[2],    # high
+            "l": k[3],    # low
+            "c": k[4],    # close
+            "v": k[5],    # volume
+            "T": k[6],    # close time ms
+            "qv": k[7],   # quote volume
+            "n": k[8],    # trades
+            "tbv": k[9],  # taker buy base vol
+            "tqv": k[10], # taker buy quote vol
         })
     return result
 
 
 def fetch_spot_klines(symbol, interval, limit):
-    url = f"{SPOT_BASE}/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-    data = fetch(url)
-    if data:
-        return parse_klines(data)
+    for base in SPOT_BASES:
+        url = f"{base}/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+        data = fetch(url)
+        if data is not None:
+            return parse_klines(data)
+        print("  Trying next base URL...", flush=True)
     return []
 
 
@@ -81,9 +99,10 @@ def fetch_index_klines(symbol, interval, limit):
 def main():
     now = datetime.now(timezone.utc)
     ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    print(f"[{ts}] Fetching klines...")
+    print(f"[{ts}] Fetching klines...", flush=True)
 
     all_klines = {}
+    total_candles = 0
 
     for sym in SYMBOLS:
         all_klines[sym] = {}
@@ -94,9 +113,9 @@ def main():
                 klines = fetch_index_klines(sym, interval, limit)
 
             all_klines[sym][interval] = klines
-            print(f"  {sym} {interval}: {len(klines)} candles")
+            total_candles += len(klines)
+            print(f"  {sym} {interval}: {len(klines)} candles", flush=True)
 
-            # Save per-symbol per-interval file
             os.makedirs(f"data/klines/{sym}", exist_ok=True)
             path = f"data/klines/{sym}/{interval}.json"
             with open(path, "w") as f:
@@ -107,7 +126,11 @@ def main():
                     "klines": klines,
                 }, f, separators=(",", ":"))
 
-            time.sleep(0.12)  # ~8 req/sec, well within limits
+            time.sleep(0.12)
+
+    if total_candles == 0:
+        print("[FATAL] No kline data fetched — all base URLs failed.", flush=True)
+        sys.exit(1)
 
     # Patch klines into latest.json
     latest_path = "data/latest.json"
@@ -125,11 +148,11 @@ def main():
             latest["klines_updated_at"] = ts
             with open(latest_path, "w") as f:
                 json.dump(latest, f, separators=(",", ":"))
-            print("  Patched klines into data/latest.json")
+            print("  Patched klines into data/latest.json", flush=True)
         except Exception as e:
-            print(f"  Warning: could not patch latest.json: {e}")
+            print(f"  Warning: could not patch latest.json: {e}", flush=True)
 
-    print("Done.")
+    print("Done.", flush=True)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,14 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Test Binance connectivity
+        run: |
+          echo "=== ping ==="
+          curl -sf "https://api.binance.com/api/v3/ping" && echo "SPOT OK" || echo "SPOT FAILED"
+          curl -sf "https://fapi.binance.com/fapi/v1/ping" && echo "FAPI OK" || echo "FAPI FAILED"
+          echo "=== BTCUSDT price ==="
+          curl -sf "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT" || echo "price fetch failed"
+
       - name: Fetch market data
         run: python scripts/fetch_market_data.py
 
