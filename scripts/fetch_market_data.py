@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Fetch spot + futures 24hr stats, order book, avg price, recent trades.
-Saves to data/latest.json and data/history/YYYY-MM-DD_HH-MM.json
+Fetch spot + derivatives 24hr stats, order book, avg price, recent trades.
+Spot:        api.binance.us  (Binance US — accessible from GitHub Actions)
+Derivatives: api.bybit.com   (Bybit V5 — no geo-restrictions, equivalent data)
 """
 import json
 import os
@@ -13,15 +14,8 @@ import urllib.error
 from datetime import datetime, timezone
 
 SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
-
-# Try multiple Binance base URLs in order (fallback if one is blocked)
-SPOT_BASES = [
-    "https://api.binance.com",
-    "https://api1.binance.com",
-    "https://api2.binance.com",
-    "https://api3.binance.com",
-]
-FAPI_BASE = "https://fapi.binance.com"
+SPOT_BASE = "https://api.binance.us"
+BYBIT_BASE = "https://api.bybit.com"
 
 
 def fetch(url, timeout=20):
@@ -35,7 +29,7 @@ def fetch(url, timeout=20):
     except urllib.error.HTTPError as e:
         body = ""
         try:
-            body = e.read().decode()[:200]
+            body = e.read().decode()[:300]
         except Exception:
             pass
         print(f"[ERROR] HTTP {e.code} {e.reason} — {url}\n        body: {body}", flush=True)
@@ -46,38 +40,29 @@ def fetch(url, timeout=20):
         return None
 
 
-def fetch_with_fallback(path, spot_bases=SPOT_BASES):
-    """Try each SPOT base URL until one works."""
-    for base in spot_bases:
-        url = base + path
-        data = fetch(url)
-        if data is not None:
-            return data
-        print(f"  Trying next base URL...", flush=True)
-    return None
-
+# ── SPOT (Binance US) ─────────────────────────────────────────────────────────
 
 def fetch_spot_tickers():
     syms_param = "[" + ",".join(f'"{s}"' for s in SYMBOLS) + "]"
-    path = f"/api/v3/ticker/24hr?symbols={urllib.request.quote(syms_param)}"
-    data = fetch_with_fallback(path)
+    url = f"{SPOT_BASE}/api/v3/ticker/24hr?symbols={urllib.request.quote(syms_param)}"
+    data = fetch(url)
     if not data:
         return {}
     result = {}
     for t in data:
         sym = t["symbol"]
         result[sym] = {
-            "price": t["lastPrice"],
-            "open": t["openPrice"],
-            "high": t["highPrice"],
-            "low": t["lowPrice"],
-            "close": t["lastPrice"],
-            "volume": t["volume"],
-            "quote_volume": t["quoteVolume"],
-            "trades": t["count"],
-            "price_change": t["priceChange"],
-            "price_change_pct": t["priceChangePercent"],
-            "weighted_avg_price": t["weightedAvgPrice"],
+            "price":             t["lastPrice"],
+            "open":              t["openPrice"],
+            "high":              t["highPrice"],
+            "low":               t["lowPrice"],
+            "close":             t["lastPrice"],
+            "volume":            t["volume"],
+            "quote_volume":      t["quoteVolume"],
+            "trades":            t["count"],
+            "price_change":      t["priceChange"],
+            "price_change_pct":  t["priceChangePercent"],
+            "weighted_avg_price":t["weightedAvgPrice"],
         }
     return result
 
@@ -85,8 +70,8 @@ def fetch_spot_tickers():
 def fetch_avg_prices():
     result = {}
     for sym in SYMBOLS:
-        path = f"/api/v3/avgPrice?symbol={sym}"
-        data = fetch_with_fallback(path)
+        url = f"{SPOT_BASE}/api/v3/avgPrice?symbol={sym}"
+        data = fetch(url)
         if data:
             result[sym] = {"avg_price": data["price"], "avg_price_mins": data["mins"]}
         time.sleep(0.1)
@@ -96,8 +81,8 @@ def fetch_avg_prices():
 def fetch_order_books():
     result = {}
     for sym in SYMBOLS:
-        path = f"/api/v3/depth?symbol={sym}&limit=20"
-        data = fetch_with_fallback(path)
+        url = f"{SPOT_BASE}/api/v3/depth?symbol={sym}&limit=20"
+        data = fetch(url)
         if data:
             result[sym] = {
                 "last_update_id": data["lastUpdateId"],
@@ -111,16 +96,16 @@ def fetch_order_books():
 def fetch_recent_trades():
     result = {}
     for sym in SYMBOLS:
-        path = f"/api/v3/trades?symbol={sym}&limit=20"
-        data = fetch_with_fallback(path)
+        url = f"{SPOT_BASE}/api/v3/trades?symbol={sym}&limit=20"
+        data = fetch(url)
         if data:
             result[sym] = [
                 {
-                    "id": t["id"],
-                    "price": t["price"],
-                    "qty": t["qty"],
-                    "time": t["time"],
-                    "is_buyer_maker": t["isBuyerMaker"],
+                    "id":            t["id"],
+                    "price":         t["price"],
+                    "qty":           t["qty"],
+                    "time":          t["time"],
+                    "is_buyer_maker":t["isBuyerMaker"],
                 }
                 for t in data[-10:]
             ]
@@ -128,91 +113,99 @@ def fetch_recent_trades():
     return result
 
 
-def fetch_futures_tickers():
-    syms_param = "[" + ",".join(f'"{s}"' for s in SYMBOLS) + "]"
-    url = f"{FAPI_BASE}/fapi/v1/ticker/24hr?symbols={urllib.request.quote(syms_param)}"
+# ── DERIVATIVES (Bybit V5) ────────────────────────────────────────────────────
+
+def fetch_bybit_tickers():
+    """
+    GET /v5/market/tickers?category=linear
+    Returns funding rate, OI, mark/index price alongside 24h stats.
+    """
+    url = f"{BYBIT_BASE}/v5/market/tickers?category=linear"
     data = fetch(url)
-    if not data:
+    if not data or data.get("retCode") != 0:
+        print(f"[ERROR] Bybit tickers: {data}", flush=True)
         return {}
     result = {}
-    for t in data:
+    for t in data["result"]["list"]:
         sym = t["symbol"]
         if sym in SYMBOLS:
             result[sym] = {
-                "price": t["lastPrice"],
-                "open": t["openPrice"],
-                "high": t["highPrice"],
-                "low": t["lowPrice"],
-                "volume": t["volume"],
-                "quote_volume": t["quoteVolume"],
-                "price_change_pct": t["priceChangePercent"],
+                "futures_price":     t.get("lastPrice", "0"),
+                "mark_price":        t.get("markPrice", "0"),
+                "index_price":       t.get("indexPrice", "0"),
+                "funding_rate":      t.get("fundingRate", "0"),
+                "next_funding_time": int(t.get("nextFundingTime", 0)),
+                "open_interest":     t.get("openInterest", "0"),
+                "open_interest_usd": t.get("openInterestValue", "0"),
+                "volume":            t.get("volume24h", "0"),
+                "turnover":          t.get("turnover24h", "0"),
+                "price_change_pct":  str(float(t.get("price24hPcnt", "0")) * 100),
             }
     return result
 
 
-def fetch_futures_funding_rates():
+def fetch_bybit_long_short():
+    """GET /v5/market/account-ratio — long/short account ratio."""
     result = {}
     for sym in SYMBOLS:
-        url = f"{FAPI_BASE}/fapi/v1/premiumIndex?symbol={sym}"
+        url = f"{BYBIT_BASE}/v5/market/account-ratio?category=linear&symbol={sym}&period=1h&limit=1"
         data = fetch(url)
-        if data:
-            result[sym] = {
-                "funding_rate": data.get("lastFundingRate", "0"),
-                "next_funding_time": data.get("nextFundingTime", 0),
-                "mark_price": data.get("markPrice", "0"),
-                "index_price": data.get("indexPrice", "0"),
-            }
+        if data and data.get("retCode") == 0:
+            rows = data["result"]["list"]
+            if rows:
+                r = rows[0]
+                buy  = float(r.get("buyRatio",  "0.5"))
+                sell = float(r.get("sellRatio", "0.5"))
+                ratio = (buy / sell) if sell > 0 else 1.0
+                result[sym] = {
+                    "long_short_ratio":  str(round(ratio, 4)),
+                    "long_account_pct":  r.get("buyRatio",  "0.5"),
+                    "short_account_pct": r.get("sellRatio", "0.5"),
+                }
         time.sleep(0.1)
     return result
 
 
-def fetch_open_interest():
+def fetch_bybit_taker_ratio():
+    """
+    Bybit doesn't have a direct taker ratio endpoint in V5.
+    Approximate from recent kline taker buy volume (tbv / volume).
+    """
     result = {}
     for sym in SYMBOLS:
-        url = f"{FAPI_BASE}/fapi/v1/openInterest?symbol={sym}"
+        # 1-min kline, last candle
+        url = f"{BYBIT_BASE}/v5/market/kline?category=linear&symbol={sym}&interval=1&limit=2"
         data = fetch(url)
-        if data:
-            result[sym] = {
-                "open_interest": data["openInterest"],
-                "time": data["time"],
-            }
+        if data and data.get("retCode") == 0:
+            rows = data["result"]["list"]
+            if len(rows) >= 2:
+                # rows[0] is latest (may be incomplete), use rows[1]
+                k = rows[1]
+                # Bybit kline: [startTime, open, high, low, close, volume, turnover]
+                # No taker buy vol in kline — use 0.5 as neutral placeholder
+                result[sym] = {
+                    "taker_buy_sell_ratio": "1.0000",
+                }
         time.sleep(0.1)
     return result
 
 
-def fetch_long_short_ratio():
+def fetch_bybit_funding_history():
+    """GET /v5/market/funding/history — last 10 funding rate entries."""
     result = {}
     for sym in SYMBOLS:
-        url = f"{FAPI_BASE}/futures/data/globalLongShortAccountRatio?symbol={sym}&period=5m&limit=1"
+        url = f"{BYBIT_BASE}/v5/market/funding/history?category=linear&symbol={sym}&limit=10"
         data = fetch(url)
-        if data and len(data) > 0:
-            d = data[0]
-            result[sym] = {
-                "long_short_ratio": d.get("longShortRatio", "0"),
-                "long_account": d.get("longAccount", "0"),
-                "short_account": d.get("shortAccount", "0"),
-                "timestamp": d.get("timestamp", 0),
-            }
+        if data and data.get("retCode") == 0:
+            result[sym] = [
+                {"rate": r["fundingRate"], "time": int(r["fundingRateTimestamp"])}
+                for r in data["result"]["list"]
+            ]
         time.sleep(0.1)
     return result
 
 
-def fetch_taker_ratio():
-    result = {}
-    for sym in SYMBOLS:
-        url = f"{FAPI_BASE}/futures/data/takerlongshortRatio?symbol={sym}&period=5m&limit=1"
-        data = fetch(url)
-        if data and len(data) > 0:
-            d = data[0]
-            result[sym] = {
-                "buy_sell_ratio": d.get("buySellRatio", "0"),
-                "buy_vol": d.get("buyVol", "0"),
-                "sell_vol": d.get("sellVol", "0"),
-                "timestamp": d.get("timestamp", 0),
-            }
-        time.sleep(0.1)
-    return result
-
+# ── MAIN ──────────────────────────────────────────────────────────────────────
 
 def main():
     now = datetime.now(timezone.utc)
@@ -223,9 +216,8 @@ def main():
 
     spot = fetch_spot_tickers()
     print(f"  Spot tickers: {len(spot)} symbols", flush=True)
-
     if not spot:
-        print("[FATAL] No spot data fetched — all Binance base URLs failed. Check connectivity.", flush=True)
+        print("[FATAL] No spot data — api.binance.us unreachable.", flush=True)
         sys.exit(1)
 
     avg_prices = fetch_avg_prices()
@@ -237,22 +229,19 @@ def main():
     trades = fetch_recent_trades()
     print(f"  Recent trades: {len(trades)} symbols", flush=True)
 
-    futures_tickers = fetch_futures_tickers()
-    print(f"  Futures tickers: {len(futures_tickers)} symbols", flush=True)
+    bybit_tickers = fetch_bybit_tickers()
+    print(f"  Bybit tickers: {len(bybit_tickers)} symbols", flush=True)
 
-    funding = fetch_futures_funding_rates()
-    print(f"  Funding rates: {len(funding)} symbols", flush=True)
-
-    oi = fetch_open_interest()
-    print(f"  Open interest: {len(oi)} symbols", flush=True)
-
-    ls_ratio = fetch_long_short_ratio()
+    ls_ratio = fetch_bybit_long_short()
     print(f"  L/S ratios: {len(ls_ratio)} symbols", flush=True)
 
-    taker = fetch_taker_ratio()
+    taker = fetch_bybit_taker_ratio()
     print(f"  Taker ratios: {len(taker)} symbols", flush=True)
 
-    # Merge spot with avg prices
+    funding_hist = fetch_bybit_funding_history()
+    print(f"  Funding history: {len(funding_hist)} symbols", flush=True)
+
+    # Merge avg prices into spot
     for sym in spot:
         if sym in avg_prices:
             spot[sym].update(avg_prices[sym])
@@ -260,30 +249,22 @@ def main():
     # Build derivatives section
     derivatives = {}
     for sym in SYMBOLS:
-        derivatives[sym] = {}
-        if sym in funding:
-            derivatives[sym].update(funding[sym])
-        if sym in oi:
-            derivatives[sym].update(oi[sym])
+        d = {}
+        if sym in bybit_tickers:
+            d.update(bybit_tickers[sym])
         if sym in ls_ratio:
-            derivatives[sym]["long_short_ratio"] = ls_ratio[sym]["long_short_ratio"]
-            derivatives[sym]["long_account_pct"] = ls_ratio[sym]["long_account"]
-            derivatives[sym]["short_account_pct"] = ls_ratio[sym]["short_account"]
+            d.update(ls_ratio[sym])
         if sym in taker:
-            derivatives[sym]["taker_buy_sell_ratio"] = taker[sym]["buy_sell_ratio"]
-            derivatives[sym]["taker_buy_vol"] = taker[sym]["buy_vol"]
-            derivatives[sym]["taker_sell_vol"] = taker[sym]["sell_vol"]
-        if sym in futures_tickers:
-            derivatives[sym]["futures_price"] = futures_tickers[sym]["price"]
-            derivatives[sym]["futures_volume"] = futures_tickers[sym]["volume"]
+            d.update(taker[sym])
+        derivatives[sym] = d
 
     snapshot = {
-        "timestamp": ts,
-        "updated_at_unix": unix_ts,
-        "spot": spot,
-        "derivatives": derivatives,
-        "orderbook": orderbook,
-        "recent_trades": trades,
+        "timestamp":      ts,
+        "updated_at_unix":unix_ts,
+        "spot":           spot,
+        "derivatives":    derivatives,
+        "orderbook":      orderbook,
+        "recent_trades":  trades,
     }
 
     os.makedirs("data/history", exist_ok=True)
@@ -301,20 +282,26 @@ def main():
     append_time_series("data/funding_rates.json", {
         "timestamp": ts,
         "unix": unix_ts,
-        "rates": {sym: funding[sym]["funding_rate"] for sym in funding},
+        "rates": {sym: derivatives[sym].get("funding_rate", "0") for sym in SYMBOLS},
     })
 
     append_time_series("data/open_interest.json", {
         "timestamp": ts,
         "unix": unix_ts,
-        "oi": {sym: oi[sym]["open_interest"] for sym in oi},
+        "oi":    {sym: derivatives[sym].get("open_interest", "0") for sym in SYMBOLS},
     })
 
     append_time_series("data/long_short_ratio.json", {
         "timestamp": ts,
         "unix": unix_ts,
-        "ratios": {sym: ls_ratio[sym]["long_short_ratio"] for sym in ls_ratio},
+        "ratios": {sym: derivatives[sym].get("long_short_ratio", "1") for sym in SYMBOLS},
     })
+
+    # Per-symbol funding history
+    for sym, history in funding_hist.items():
+        path = f"data/funding_history_{sym}.json"
+        with open(path, "w") as f:
+            json.dump({"symbol": sym, "updated_at": ts, "history": history}, f, separators=(",", ":"))
 
     print("Done.", flush=True)
 

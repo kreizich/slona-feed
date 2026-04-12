@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Fetch multi-timeframe OHLCV klines for tracked symbols.
-Saves to data/klines/<symbol>/<interval>.json
-Also patches klines section into data/latest.json
+Fetch multi-timeframe OHLCV klines.
+Spot klines:       api.binance.us  (Binance US)
+Derivatives klines: api.bybit.com  (Bybit V5)
 """
 import json
 import os
@@ -14,22 +14,17 @@ import urllib.error
 from datetime import datetime, timezone
 
 SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
-SPOT_BASES = [
-    "https://api.binance.com",
-    "https://api1.binance.com",
-    "https://api2.binance.com",
-    "https://api3.binance.com",
-]
-FAPI_BASE = "https://fapi.binance.com"
+SPOT_BASE  = "https://api.binance.us"
+BYBIT_BASE = "https://api.bybit.com"
 
-# interval -> (limit, source)
+# interval -> (limit, binance_interval, bybit_interval)
 INTERVALS = {
-    "1m":  (60,  "spot"),
-    "5m":  (60,  "spot"),
-    "15m": (96,  "spot"),
-    "1h":  (48,  "spot"),
-    "4h":  (30,  "spot"),
-    "1d":  (30,  "spot"),
+    "1m":  (60,  "1m",  "1"),
+    "5m":  (60,  "5m",  "5"),
+    "15m": (96,  "15m", "15"),
+    "1h":  (48,  "1h",  "60"),
+    "4h":  (30,  "4h",  "240"),
+    "1d":  (30,  "1d",  "D"),
 }
 
 
@@ -44,7 +39,7 @@ def fetch(url, timeout=20):
     except urllib.error.HTTPError as e:
         body = ""
         try:
-            body = e.read().decode()[:200]
+            body = e.read().decode()[:300]
         except Exception:
             pass
         print(f"[ERROR] HTTP {e.code} {e.reason} — {url}\n        body: {body}", flush=True)
@@ -55,44 +50,57 @@ def fetch(url, timeout=20):
         return None
 
 
-def parse_klines(raw):
-    """Convert raw kline arrays to dicts."""
+def parse_binance_klines(raw):
+    return [
+        {
+            "t":   k[0],
+            "o":   k[1],
+            "h":   k[2],
+            "l":   k[3],
+            "c":   k[4],
+            "v":   k[5],
+            "T":   k[6],
+            "qv":  k[7],
+            "n":   k[8],
+            "tbv": k[9],
+            "tqv": k[10],
+        }
+        for k in raw
+    ]
+
+
+def parse_bybit_klines(raw):
+    """
+    Bybit V5 kline list: [startTime, open, high, low, close, volume, turnover]
+    Returned newest-first, so reverse.
+    """
     result = []
-    for k in raw:
+    for k in reversed(raw):
         result.append({
-            "t": k[0],    # open time ms
-            "o": k[1],    # open
-            "h": k[2],    # high
-            "l": k[3],    # low
-            "c": k[4],    # close
-            "v": k[5],    # volume
-            "T": k[6],    # close time ms
-            "qv": k[7],   # quote volume
-            "n": k[8],    # trades
-            "tbv": k[9],  # taker buy base vol
-            "tqv": k[10], # taker buy quote vol
+            "t":  int(k[0]),
+            "o":  k[1],
+            "h":  k[2],
+            "l":  k[3],
+            "c":  k[4],
+            "v":  k[5],
+            "qv": k[6],
         })
     return result
 
 
 def fetch_spot_klines(symbol, interval, limit):
-    for base in SPOT_BASES:
-        url = f"{base}/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-        data = fetch(url)
-        if data is not None:
-            return parse_klines(data)
-        print("  Trying next base URL...", flush=True)
+    url = f"{SPOT_BASE}/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+    data = fetch(url)
+    if data is not None:
+        return parse_binance_klines(data)
     return []
 
 
-def fetch_index_klines(symbol, interval, limit):
-    url = f"{FAPI_BASE}/fapi/v1/indexPriceKlines?pair={symbol}&interval={interval}&limit={limit}"
+def fetch_bybit_klines(symbol, bybit_interval, limit):
+    url = f"{BYBIT_BASE}/v5/market/kline?category=linear&symbol={symbol}&interval={bybit_interval}&limit={limit}"
     data = fetch(url)
-    if data:
-        return [
-            {"t": k[0], "o": k[1], "h": k[2], "l": k[3], "c": k[4], "T": k[6], "n": k[8]}
-            for k in data
-        ]
+    if data and data.get("retCode") == 0:
+        return parse_bybit_klines(data["result"]["list"])
     return []
 
 
@@ -106,30 +114,30 @@ def main():
 
     for sym in SYMBOLS:
         all_klines[sym] = {}
-        for interval, (limit, source) in INTERVALS.items():
-            if source == "spot":
-                klines = fetch_spot_klines(sym, interval, limit)
-            else:
-                klines = fetch_index_klines(sym, interval, limit)
+        for interval, (limit, binance_iv, bybit_iv) in INTERVALS.items():
+            # Try Binance US first, fall back to Bybit
+            klines = fetch_spot_klines(sym, binance_iv, limit)
+            if not klines:
+                print(f"  {sym} {interval}: Binance US failed, trying Bybit...", flush=True)
+                klines = fetch_bybit_klines(sym, bybit_iv, limit)
 
             all_klines[sym][interval] = klines
             total_candles += len(klines)
             print(f"  {sym} {interval}: {len(klines)} candles", flush=True)
 
             os.makedirs(f"data/klines/{sym}", exist_ok=True)
-            path = f"data/klines/{sym}/{interval}.json"
-            with open(path, "w") as f:
+            with open(f"data/klines/{sym}/{interval}.json", "w") as f:
                 json.dump({
-                    "symbol": sym,
-                    "interval": interval,
+                    "symbol":     sym,
+                    "interval":   interval,
                     "updated_at": ts,
-                    "klines": klines,
+                    "klines":     klines,
                 }, f, separators=(",", ":"))
 
             time.sleep(0.12)
 
     if total_candles == 0:
-        print("[FATAL] No kline data fetched — all base URLs failed.", flush=True)
+        print("[FATAL] No kline data fetched from any source.", flush=True)
         sys.exit(1)
 
     # Patch klines into latest.json
@@ -139,10 +147,7 @@ def main():
             with open(latest_path) as f:
                 latest = json.load(f)
             latest["klines"] = {
-                sym: {
-                    iv: all_klines[sym][iv]
-                    for iv in ["15m", "1h", "4h", "1d"]
-                }
+                sym: {iv: all_klines[sym][iv] for iv in ["15m", "1h", "4h", "1d"]}
                 for sym in SYMBOLS
             }
             latest["klines_updated_at"] = ts
