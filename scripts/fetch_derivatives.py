@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Fetch futures/derivatives data from Bybit V5 API.
-(Binance futures uses HTTP 451 from GitHub Actions — US geo-restriction)
+Fetch futures/derivatives data.
+Primary:  OKX public API  (api.okx.com) — no geo-block, no API key needed
+Fallback: Gate.io futures API (api.gateio.ws)
 """
 import json
 import os
@@ -12,16 +13,44 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
-SYMBOLS    = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
-BYBIT_BASE = "https://api.bybit.com"
-MAX_ENTRIES = 2016  # ~7 days at 5-min intervals
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
+
+# OKX uses "BTC-USDT-SWAP" format; ccy for statistics endpoints
+OKX_INST = {
+    "BTCUSDT": "BTC-USDT-SWAP",
+    "ETHUSDT": "ETH-USDT-SWAP",
+    "SOLUSDT": "SOL-USDT-SWAP",
+    "XRPUSDT": "XRP-USDT-SWAP",
+    "BNBUSDT": "BNB-USDT-SWAP",
+}
+OKX_CCY = {
+    "BTCUSDT": "BTC",
+    "ETHUSDT": "ETH",
+    "SOLUSDT": "SOL",
+    "XRPUSDT": "XRP",
+    "BNBUSDT": "BNB",
+}
+
+# Gate.io uses "BTC_USDT" format
+GATE_SYM = {
+    "BTCUSDT": "BTC_USDT",
+    "ETHUSDT": "ETH_USDT",
+    "SOLUSDT": "SOL_USDT",
+    "XRPUSDT": "XRP_USDT",
+    "BNBUSDT": "BNB_USDT",
+}
+
+OKX_BASE  = "https://www.okx.com"
+GATE_BASE = "https://api.gateio.ws/api/v4"
+MAX_ENTRIES = 2016
 
 
 def fetch(url, timeout=20):
     try:
         req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; slona-feed/1.0)",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0",
             "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.5",
         })
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode())
@@ -31,7 +60,7 @@ def fetch(url, timeout=20):
             body = e.read().decode()[:300]
         except Exception:
             pass
-        print(f"[ERROR] HTTP {e.code} {e.reason} — {url}\n        body: {body}", flush=True)
+        print(f"[ERROR] HTTP {e.code} {e.reason} — {url}\n        body: {body[:120]}", flush=True)
         return None
     except Exception as e:
         print(f"[ERROR] {type(e).__name__}: {e} — {url}", flush=True)
@@ -55,145 +84,224 @@ def append_ts(path, entry, max_entries=MAX_ENTRIES):
         json.dump(data, f, separators=(",", ":"))
 
 
-def fetch_bybit_tickers():
-    """Tickers include funding rate, OI, mark/index price."""
-    url = f"{BYBIT_BASE}/v5/market/tickers?category=linear"
+# ── OKX ──────────────────────────────────────────────────────────────────────
+
+def okx_tickers():
+    """GET /api/v5/market/tickers?instType=SWAP — all perpetual swap tickers."""
+    url = f"{OKX_BASE}/api/v5/market/tickers?instType=SWAP"
     data = fetch(url)
-    if not data or data.get("retCode") != 0:
+    if not data or data.get("code") != "0":
+        print(f"[WARN] OKX tickers failed: {data}", flush=True)
         return {}
     result = {}
-    for t in data["result"]["list"]:
-        sym = t["symbol"]
-        if sym in SYMBOLS:
-            result[sym] = {
-                "futures_price":     t.get("lastPrice", "0"),
-                "mark_price":        t.get("markPrice", "0"),
-                "index_price":       t.get("indexPrice", "0"),
-                "funding_rate":      t.get("fundingRate", "0"),
-                "next_funding_time": int(t.get("nextFundingTime", 0)),
-                "open_interest":     t.get("openInterest", "0"),
-                "open_interest_usd": t.get("openInterestValue", "0"),
-            }
+    for t in data["data"]:
+        inst = t["instId"]
+        sym  = next((s for s, i in OKX_INST.items() if i == inst), None)
+        if not sym:
+            continue
+        result[sym] = {
+            "futures_price": t.get("last", "0"),
+            "open":          t.get("open24h", "0"),
+            "high":          t.get("high24h", "0"),
+            "low":           t.get("low24h", "0"),
+            "volume":        t.get("vol24h", "0"),
+            "open_interest": t.get("oi", "0"),
+            "open_interest_usd": t.get("oiCcy", "0"),
+        }
     return result
 
 
-def fetch_bybit_oi_history():
-    """Open interest history (5-min snapshots)."""
-    result = {}
-    for sym in SYMBOLS:
-        url = f"{BYBIT_BASE}/v5/market/open-interest?category=linear&symbol={sym}&intervalTime=5min&limit=1"
-        data = fetch(url)
-        if data and data.get("retCode") == 0:
-            rows = data["result"]["list"]
-            if rows:
-                result[sym] = {
-                    "open_interest": rows[0].get("openInterest", "0"),
-                    "timestamp":     int(rows[0].get("timestamp", 0)),
-                }
-        time.sleep(0.1)
-    return result
+def okx_funding_rate(sym):
+    """GET /api/v5/public/funding-rate — current funding rate."""
+    inst = OKX_INST[sym]
+    url  = f"{OKX_BASE}/api/v5/public/funding-rate?instId={inst}"
+    data = fetch(url)
+    if data and data.get("code") == "0" and data["data"]:
+        d = data["data"][0]
+        return {
+            "funding_rate":      d.get("fundingRate", "0"),
+            "next_funding_time": int(d.get("fundingTime", 0)),
+        }
+    return {}
 
 
-def fetch_bybit_long_short():
-    """Long/short account ratio."""
-    result = {}
-    for sym in SYMBOLS:
-        url = f"{BYBIT_BASE}/v5/market/account-ratio?category=linear&symbol={sym}&period=1h&limit=1"
-        data = fetch(url)
-        if data and data.get("retCode") == 0:
-            rows = data["result"]["list"]
-            if rows:
-                r = rows[0]
-                buy  = float(r.get("buyRatio",  "0.5"))
-                sell = float(r.get("sellRatio", "0.5"))
-                ratio = (buy / sell) if sell > 0 else 1.0
-                result[sym] = {
-                    "long_short_ratio":  str(round(ratio, 4)),
-                    "long_account_pct":  r.get("buyRatio",  "0.5"),
-                    "short_account_pct": r.get("sellRatio", "0.5"),
-                }
-        time.sleep(0.1)
-    return result
+def okx_mark_index(sym):
+    """GET /api/v5/market/mark-price — mark & index price."""
+    inst = OKX_INST[sym]
+    url  = f"{OKX_BASE}/api/v5/market/mark-price?instType=SWAP&instId={inst}"
+    data = fetch(url)
+    if data and data.get("code") == "0" and data["data"]:
+        d = data["data"][0]
+        return {
+            "mark_price":  d.get("markPx", "0"),
+        }
+    return {}
 
 
-def fetch_bybit_funding_history():
-    """Last 10 funding rate entries per symbol."""
-    result = {}
-    for sym in SYMBOLS:
-        url = f"{BYBIT_BASE}/v5/market/funding/history?category=linear&symbol={sym}&limit=10"
-        data = fetch(url)
-        if data and data.get("retCode") == 0:
-            result[sym] = [
-                {"rate": r["fundingRate"], "time": int(r["fundingRateTimestamp"])}
-                for r in data["result"]["list"]
-            ]
-        time.sleep(0.1)
-    return result
+def okx_long_short(sym):
+    """GET /api/v5/rubik/stat/contracts/long-short-account-ratio."""
+    ccy = OKX_CCY[sym]
+    url = f"{OKX_BASE}/api/v5/rubik/stat/contracts/long-short-account-ratio?ccy={ccy}&period=1H"
+    data = fetch(url)
+    if data and data.get("code") == "0" and data.get("data"):
+        # Returns [[timestamp, longRatio, shortRatio], ...]  newest last
+        row = data["data"][-1]
+        long_r  = float(row[1])
+        short_r = float(row[2])
+        ratio   = (long_r / short_r) if short_r > 0 else 1.0
+        return {
+            "long_short_ratio":  str(round(ratio, 4)),
+            "long_account_pct":  str(long_r),
+            "short_account_pct": str(short_r),
+        }
+    return {}
 
+
+def okx_funding_history(sym):
+    """GET /api/v5/public/funding-rate-history."""
+    inst = OKX_INST[sym]
+    url  = f"{OKX_BASE}/api/v5/public/funding-rate-history?instId={inst}&limit=10"
+    data = fetch(url)
+    if data and data.get("code") == "0":
+        return [
+            {"rate": d["fundingRate"], "time": int(d["fundingTime"])}
+            for d in data["data"]
+        ]
+    return []
+
+
+# ── Gate.io fallback ──────────────────────────────────────────────────────────
+
+def gate_ticker(sym):
+    """GET /futures/usdt/tickers?contract=BTC_USDT."""
+    gsym = GATE_SYM[sym]
+    url  = f"{GATE_BASE}/futures/usdt/tickers?contract={gsym}"
+    data = fetch(url)
+    if data and isinstance(data, list) and data:
+        t = data[0]
+        return {
+            "futures_price": t.get("last", "0"),
+            "volume":        t.get("volume_24h_quote", "0"),
+            "open_interest": t.get("open_interest", "0"),
+            "funding_rate":  t.get("funding_rate", "0"),
+            "mark_price":    t.get("mark_price", "0"),
+            "index_price":   t.get("index_price", "0"),
+        }
+    return {}
+
+
+def gate_funding_history(sym):
+    gsym = GATE_SYM[sym]
+    url  = f"{GATE_BASE}/futures/usdt/funding_rate?contract={gsym}&limit=10"
+    data = fetch(url)
+    if data and isinstance(data, list):
+        return [
+            {"rate": str(d.get("r", "0")), "time": int(d.get("t", 0)) * 1000}
+            for d in data
+        ]
+    return []
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    now = datetime.now(timezone.utc)
-    ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    unix_ts = int(now.timestamp())
-    print(f"[{ts}] Fetching derivatives data (Bybit)...", flush=True)
+    now      = datetime.now(timezone.utc)
+    ts       = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    unix_ts  = int(now.timestamp())
+    print(f"[{ts}] Fetching derivatives data...", flush=True)
 
     os.makedirs("data", exist_ok=True)
 
-    tickers = fetch_bybit_tickers()
-    print(f"  Tickers: {len(tickers)} symbols", flush=True)
+    # ── OKX bulk ticker (1 request for all symbols) ──
+    okx_tick = okx_tickers()
+    print(f"  OKX tickers: {len(okx_tick)} symbols", flush=True)
 
-    if not tickers:
-        print("[FATAL] No Bybit ticker data — api.bybit.com unreachable.", flush=True)
+    use_gate = len(okx_tick) == 0   # fall back to Gate.io if OKX bulk failed
+
+    derivatives = {}
+    funding_hist_all = {}
+
+    for sym in SYMBOLS:
+        d = {}
+
+        if not use_gate and sym in okx_tick:
+            d.update(okx_tick[sym])
+
+            # Funding rate
+            fr = okx_funding_rate(sym)
+            d.update(fr)
+            time.sleep(0.1)
+
+            # Mark price
+            mp = okx_mark_index(sym)
+            d.update(mp)
+            time.sleep(0.1)
+
+            # Long/short ratio
+            ls = okx_long_short(sym)
+            d.update(ls)
+            time.sleep(0.1)
+
+            # Funding history
+            fh = okx_funding_history(sym)
+            if fh:
+                funding_hist_all[sym] = fh
+            time.sleep(0.1)
+
+        else:
+            # Gate.io fallback
+            print(f"  [{sym}] Using Gate.io fallback", flush=True)
+            gt = gate_ticker(sym)
+            d.update(gt)
+            time.sleep(0.1)
+
+            fh = gate_funding_history(sym)
+            if fh:
+                funding_hist_all[sym] = fh
+            time.sleep(0.1)
+
+        derivatives[sym] = d
+        rate = d.get("funding_rate", "?")
+        oi   = d.get("open_interest", "?")
+        print(f"  {sym}: funding={rate}  OI={oi}", flush=True)
+
+    if not any(derivatives.values()):
+        print("[FATAL] No derivatives data from OKX or Gate.io.", flush=True)
         sys.exit(1)
 
-    oi_hist = fetch_bybit_oi_history()
-    print(f"  OI history: {len(oi_hist)} symbols", flush=True)
-
-    ls = fetch_bybit_long_short()
-    print(f"  L/S ratio: {len(ls)} symbols", flush=True)
-
-    funding_hist = fetch_bybit_funding_history()
-    print(f"  Funding history: {len(funding_hist)} symbols", flush=True)
-
-    # Append time-series
+    # ── Time-series append ──
     append_ts("data/funding_rates.json", {
         "timestamp": ts,
         "unix": unix_ts,
-        "rates": {sym: tickers[sym]["funding_rate"] for sym in tickers},
-        "next_funding": {sym: tickers[sym]["next_funding_time"] for sym in tickers},
+        "rates": {s: derivatives[s].get("funding_rate", "0") for s in SYMBOLS},
+        "next_funding": {s: derivatives[s].get("next_funding_time", 0) for s in SYMBOLS},
     })
 
     append_ts("data/open_interest.json", {
         "timestamp": ts,
         "unix": unix_ts,
-        "oi":       {sym: tickers[sym]["open_interest"]     for sym in tickers},
-        "oi_value": {sym: tickers[sym]["open_interest_usd"] for sym in tickers},
+        "oi":       {s: derivatives[s].get("open_interest", "0")     for s in SYMBOLS},
+        "oi_value": {s: derivatives[s].get("open_interest_usd", "0") for s in SYMBOLS},
     })
 
     append_ts("data/long_short_ratio.json", {
         "timestamp": ts,
         "unix": unix_ts,
-        "global": {sym: ls[sym]["long_short_ratio"] for sym in ls},
+        "global": {s: derivatives[s].get("long_short_ratio", "1") for s in SYMBOLS},
     })
 
-    # Per-symbol funding history files
-    for sym, history in funding_hist.items():
-        path = f"data/funding_history_{sym}.json"
-        with open(path, "w") as f:
+    for sym, history in funding_hist_all.items():
+        with open(f"data/funding_history_{sym}.json", "w") as f:
             json.dump({"symbol": sym, "updated_at": ts, "history": history}, f, separators=(",", ":"))
 
-    # Patch derivatives into latest.json
+    # ── Patch into latest.json ──
     latest_path = "data/latest.json"
     if os.path.exists(latest_path):
         try:
             with open(latest_path) as f:
                 latest = json.load(f)
             for sym in SYMBOLS:
-                d = latest.setdefault("derivatives", {}).setdefault(sym, {})
-                if sym in tickers:
-                    d.update(tickers[sym])
-                if sym in ls:
-                    d.update(ls[sym])
+                latest.setdefault("derivatives", {}).setdefault(sym, {}).update(derivatives[sym])
             latest["derivatives_updated_at"] = ts
             with open(latest_path, "w") as f:
                 json.dump(latest, f, separators=(",", ":"))
