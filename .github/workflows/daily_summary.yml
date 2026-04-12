@@ -1,0 +1,41 @@
+name: Daily Summary & Cleanup
+
+on:
+  schedule:
+    - cron: "5 0 * * *"   # 00:05 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run daily summary and cleanup
+        run: python scripts/daily_summary.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/daily/ data/funding_rates.json \
+                  data/open_interest.json data/long_short_ratio.json || true
+          git add -u data/history/ || true
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: daily summary $(date -u '+%Y-%m-%d') UTC"
+            git push origin ${{ github.ref_name }}
+          fi

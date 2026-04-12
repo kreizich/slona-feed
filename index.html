@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slona Feed — Crypto Market Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --accent: #1f6feb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  header h1 { font-size: 18px; font-weight: 600; color: var(--blue); }
+  #status { font-size: 12px; color: var(--muted); }
+  #status span { color: var(--green); }
+  .container { max-width: 1400px; margin: 0 auto; padding: 16px; }
+  .section-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 20px 0 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .symbol { font-weight: 700; font-size: 15px; color: var(--text); }
+  .badge { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
+  .badge.up { background: rgba(63,185,80,.15); color: var(--green); }
+  .badge.down { background: rgba(248,81,73,.15); color: var(--red); }
+  .price { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .price.up { color: var(--green); }
+  .price.down { color: var(--red); }
+  .price.flat { color: var(--text); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin-top: 8px; }
+  .stat { display: flex; flex-direction: column; }
+  .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; }
+  .stat-value { font-size: 12px; font-weight: 500; }
+  .sparkline-wrap { margin: 10px 0 4px; }
+  canvas.spark { width: 100%; height: 40px; display: block; }
+  .deriv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  .deriv-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .deriv-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 10px; }
+  .deriv-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border); }
+  .deriv-row:last-child { border-bottom: none; }
+  .deriv-sym { font-weight: 600; font-size: 13px; }
+  .deriv-val { font-size: 12px; font-weight: 500; }
+  .positive { color: var(--green); }
+  .negative { color: var(--red); }
+  .neutral { color: var(--muted); }
+  .ls-bar { height: 6px; border-radius: 3px; background: var(--border); margin-top: 4px; overflow: hidden; position: relative; }
+  .ls-long { height: 100%; background: var(--green); }
+  .orderbook { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ob-side { }
+  .ob-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 5px; }
+  .ob-title.bids { color: var(--green); }
+  .ob-title.asks { color: var(--red); }
+  .ob-row { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; font-family: "SFMono-Regular", Consolas, monospace; }
+  .ob-price.bid { color: var(--green); }
+  .ob-price.ask { color: var(--red); }
+  .ob-qty { color: var(--muted); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tab { padding: 5px 12px; border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: 500; border: 1px solid var(--border); background: transparent; color: var(--muted); transition: all .15s; }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tab:hover:not(.active) { border-color: var(--blue); color: var(--blue); }
+  .refresh-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .refresh-btn { padding: 6px 14px; background: var(--accent); border: none; border-radius: 5px; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .refresh-btn:hover { opacity: .85; }
+  progress { width: 120px; height: 4px; appearance: none; border-radius: 2px; overflow: hidden; }
+  progress::-webkit-progress-bar { background: var(--border); border-radius: 2px; }
+  progress::-webkit-progress-value { background: var(--accent); border-radius: 2px; transition: width .5s; }
+  .error-banner { background: rgba(248,81,73,.1); border: 1px solid var(--red); border-radius: 6px; padding: 10px 14px; color: var(--red); margin-bottom: 16px; display: none; }
+  footer { text-align: center; padding: 24px; color: var(--muted); font-size: 11px; border-top: 1px solid var(--border); margin-top: 32px; }
+  footer a { color: var(--blue); text-decoration: none; }
+  @media (max-width: 600px) {
+    .grid, .deriv-grid { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: 1fr 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Slona Feed</h1>
+  <div id="status">Loading... <span id="last-update"></span></div>
+</header>
+<div class="container">
+  <div class="refresh-bar">
+    <button class="refresh-btn" onclick="loadData()">Refresh</button>
+    <span style="font-size:12px;color:var(--muted)">Auto-refresh in <span id="countdown">30</span>s</span>
+    <progress id="refresh-progress" max="30" value="30"></progress>
+  </div>
+  <div class="error-banner" id="error-banner">Failed to load data. Retrying...</div>
+
+  <div class="section-title">Spot Prices</div>
+  <div class="grid" id="spot-grid"></div>
+
+  <div class="section-title">Derivatives</div>
+  <div class="deriv-grid" id="deriv-grid"></div>
+
+  <div class="section-title">Order Books</div>
+  <div class="tabs" id="ob-tabs"></div>
+  <div id="ob-content"></div>
+</div>
+
+<footer>
+  Data from <a href="https://www.binance.com" target="_blank">Binance</a> public API &bull;
+  Raw JSON: <a href="data/latest.json">data/latest.json</a> &bull;
+  <a href="https://github.com/kreizich/slona-feed" target="_blank">GitHub</a>
+</footer>
+
+<script>
+const DATA_URL = "data/latest.json";
+const SYMBOLS = ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT"];
+const COLORS = { BTCUSDT:"#f7931a", ETHUSDT:"#627eea", SOLUSDT:"#9945ff", XRPUSDT:"#00aae4", BNBUSDT:"#f3ba2f" };
+let currentData = null;
+let selectedOB = SYMBOLS[0];
+let countdown = 30;
+let timer = null;
+
+function fmt(n, d=2) {
+  const v = parseFloat(n);
+  if (isNaN(v)) return "—";
+  if (Math.abs(v) >= 1e9) return (v/1e9).toFixed(2)+"B";
+  if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(2)+"M";
+  if (Math.abs(v) >= 1e3) return v.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+  return v.toFixed(d);
+}
+
+function fmtPrice(n) {
+  const v = parseFloat(n);
+  if (isNaN(v)) return "—";
+  if (v >= 1000) return "$"+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  if (v >= 1) return "$"+v.toFixed(4);
+  return "$"+v.toFixed(6);
+}
+
+function pctClass(v) {
+  const n = parseFloat(v);
+  if (n > 0.01) return "up";
+  if (n < -0.01) return "down";
+  return "flat";
+}
+
+function drawSparkline(canvas, klines, color) {
+  if (!klines || klines.length === 0) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.offsetWidth || canvas.parentElement.offsetWidth || 240;
+  const h = 40;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const prices = klines.map(k => parseFloat(k.c)).filter(Boolean);
+  if (prices.length < 2) return;
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min || 1;
+  const stepX = w / (prices.length - 1);
+  ctx.beginPath();
+  prices.forEach((p, i) => {
+    const x = i * stepX;
+    const y = h - ((p - min) / range) * (h - 4) - 2;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Fill gradient
+  ctx.lineTo((prices.length-1)*stepX, h);
+  ctx.lineTo(0, h);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, color+"55");
+  grad.addColorStop(1, color+"00");
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
+function renderSpot(spot, klines) {
+  const grid = document.getElementById("spot-grid");
+  grid.innerHTML = "";
+  SYMBOLS.forEach(sym => {
+    const s = (spot || {})[sym] || {};
+    const k = ((klines || {})[sym] || {})["1h"] || [];
+    const pct = parseFloat(s.price_change_pct || 0);
+    const cls = pctClass(pct);
+    const color = COLORS[sym] || "#58a6ff";
+    const card = document.createElement("div");
+    card.className = "card";
+    const base = sym.replace("USDT","");
+    card.innerHTML = `
+      <div class="card-header">
+        <span class="symbol">${base}<span style="color:var(--muted);font-weight:400">/USDT</span></span>
+        <span class="badge ${cls}">${pct>=0?"+":""}${fmt(pct,2)}%</span>
+      </div>
+      <div class="price ${cls}">${fmtPrice(s.price)}</div>
+      <div class="sparkline-wrap"><canvas class="spark" id="spark-${sym}"></canvas></div>
+      <div class="stats">
+        <div class="stat"><span class="stat-label">24h High</span><span class="stat-value">${fmtPrice(s.high)}</span></div>
+        <div class="stat"><span class="stat-label">24h Low</span><span class="stat-value">${fmtPrice(s.low)}</span></div>
+        <div class="stat"><span class="stat-label">Volume</span><span class="stat-value">${fmt(s.volume)}</span></div>
+        <div class="stat"><span class="stat-label">Quote Vol</span><span class="stat-value">$${fmt(s.quote_volume)}</span></div>
+        <div class="stat"><span class="stat-label">Trades</span><span class="stat-value">${fmt(s.trades,0)}</span></div>
+        <div class="stat"><span class="stat-label">Avg Price</span><span class="stat-value">${fmtPrice(s.avg_price)}</span></div>
+      </div>`;
+    grid.appendChild(card);
+    requestAnimationFrame(() => {
+      const canvas = document.getElementById(`spark-${sym}`);
+      if (canvas) drawSparkline(canvas, k, color);
+    });
+  });
+}
+
+function renderDerivatives(deriv) {
+  const grid = document.getElementById("deriv-grid");
+  grid.innerHTML = "";
+  const d = deriv || {};
+
+  // Funding rates card
+  const frCard = document.createElement("div");
+  frCard.className = "deriv-card";
+  frCard.innerHTML = `<div class="deriv-title">Funding Rate (current)</div>` +
+    SYMBOLS.map(sym => {
+      const v = parseFloat((d[sym]||{}).funding_rate || 0);
+      const pct = (v * 100).toFixed(4);
+      const cls = v > 0 ? "positive" : v < 0 ? "negative" : "neutral";
+      const base = sym.replace("USDT","");
+      const nft = (d[sym]||{}).next_funding_time;
+      const nftStr = nft ? new Date(nft).toUTCString().slice(17,22)+" UTC" : "—";
+      return `<div class="deriv-row">
+        <span class="deriv-sym">${base}</span>
+        <span>
+          <span class="deriv-val ${cls}">${pct}%</span>
+          <span style="font-size:10px;color:var(--muted);margin-left:6px">next ${nftStr}</span>
+        </span>
+      </div>`;
+    }).join("");
+  grid.appendChild(frCard);
+
+  // Open interest card
+  const oiCard = document.createElement("div");
+  oiCard.className = "deriv-card";
+  oiCard.innerHTML = `<div class="deriv-title">Open Interest</div>` +
+    SYMBOLS.map(sym => {
+      const oi = parseFloat((d[sym]||{}).open_interest || 0);
+      const oiUsd = parseFloat((d[sym]||{}).open_interest_usd || 0);
+      const price = parseFloat((d[sym]||{}).futures_price || (d[sym]||{}).mark_price || 0);
+      const oiUsdCalc = oiUsd || (oi * price);
+      const base = sym.replace("USDT","");
+      return `<div class="deriv-row">
+        <span class="deriv-sym">${base}</span>
+        <span>
+          <span class="deriv-val">${fmt(oi)} contracts</span>
+          <span style="font-size:10px;color:var(--muted);margin-left:6px">$${fmt(oiUsdCalc)}</span>
+        </span>
+      </div>`;
+    }).join("");
+  grid.appendChild(oiCard);
+
+  // Long/Short ratio card
+  const lsCard = document.createElement("div");
+  lsCard.className = "deriv-card";
+  lsCard.innerHTML = `<div class="deriv-title">Long / Short Ratio (accounts)</div>` +
+    SYMBOLS.map(sym => {
+      const ratio = parseFloat((d[sym]||{}).long_short_ratio || 1);
+      const longPct = parseFloat((d[sym]||{}).long_account_pct || 0) * 100;
+      const shortPct = 100 - longPct;
+      const base = sym.replace("USDT","");
+      const lp = isNaN(longPct) ? 50 : longPct;
+      return `<div class="deriv-row" style="flex-direction:column;align-items:stretch;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+          <span class="deriv-sym">${base}</span>
+          <span>
+            <span class="deriv-val positive">${fmt(lp,1)}% L</span>
+            <span style="color:var(--muted)"> / </span>
+            <span class="deriv-val negative">${fmt(shortPct,1)}% S</span>
+            <span style="font-size:10px;color:var(--muted);margin-left:4px">ratio ${fmt(ratio,3)}</span>
+          </span>
+        </div>
+        <div class="ls-bar"><div class="ls-long" style="width:${lp}%"></div></div>
+      </div>`;
+    }).join("");
+  grid.appendChild(lsCard);
+
+  // Taker ratio card
+  const tkCard = document.createElement("div");
+  tkCard.className = "deriv-card";
+  tkCard.innerHTML = `<div class="deriv-title">Taker Buy/Sell Volume Ratio</div>` +
+    SYMBOLS.map(sym => {
+      const ratio = parseFloat((d[sym]||{}).taker_buy_sell_ratio || 1);
+      const cls = ratio > 1 ? "positive" : ratio < 1 ? "negative" : "neutral";
+      const base = sym.replace("USDT","");
+      const label = ratio > 1.05 ? "Buyers dominant" : ratio < 0.95 ? "Sellers dominant" : "Balanced";
+      return `<div class="deriv-row">
+        <span class="deriv-sym">${base}</span>
+        <span>
+          <span class="deriv-val ${cls}">${fmt(ratio,4)}</span>
+          <span style="font-size:10px;color:var(--muted);margin-left:6px">${label}</span>
+        </span>
+      </div>`;
+    }).join("");
+  grid.appendChild(tkCard);
+
+  // Mark / Index price card
+  const mpCard = document.createElement("div");
+  mpCard.className = "deriv-card";
+  mpCard.innerHTML = `<div class="deriv-title">Mark Price vs Index Price</div>` +
+    SYMBOLS.map(sym => {
+      const mark = parseFloat((d[sym]||{}).mark_price || 0);
+      const idx = parseFloat((d[sym]||{}).index_price || 0);
+      const diff = mark && idx ? ((mark - idx) / idx * 100) : 0;
+      const cls = diff > 0.01 ? "positive" : diff < -0.01 ? "negative" : "neutral";
+      const base = sym.replace("USDT","");
+      return `<div class="deriv-row">
+        <span class="deriv-sym">${base}</span>
+        <span>
+          <span class="deriv-val">${fmtPrice(mark)}</span>
+          <span style="font-size:10px;margin-left:4px;" class="${cls}">${diff>=0?"+":""}${fmt(diff,4)}%</span>
+          <span style="font-size:10px;color:var(--muted);margin-left:4px">idx ${fmtPrice(idx)}</span>
+        </span>
+      </div>`;
+    }).join("");
+  grid.appendChild(mpCard);
+}
+
+function renderOrderBook(orderbook, sym) {
+  const ob = (orderbook || {})[sym] || {};
+  const bids = ob.bids || [];
+  const asks = ob.asks || [];
+  const el = document.getElementById("ob-content");
+  el.innerHTML = `
+    <div class="card">
+      <div class="orderbook">
+        <div class="ob-side">
+          <div class="ob-title bids">Bids</div>
+          ${bids.map(([p,q]) => `<div class="ob-row"><span class="ob-price bid">${fmtPrice(p)}</span><span class="ob-qty">${fmt(q,4)}</span></div>`).join("")}
+        </div>
+        <div class="ob-side">
+          <div class="ob-title asks">Asks</div>
+          ${asks.map(([p,q]) => `<div class="ob-row"><span class="ob-price ask">${fmtPrice(p)}</span><span class="ob-qty">${fmt(q,4)}</span></div>`).join("")}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderOBTabs(orderbook) {
+  const tabs = document.getElementById("ob-tabs");
+  tabs.innerHTML = SYMBOLS.map(sym => {
+    const base = sym.replace("USDT","");
+    return `<button class="tab ${sym===selectedOB?"active":""}" onclick="selectOB('${sym}')">${base}</button>`;
+  }).join("");
+  renderOrderBook(orderbook, selectedOB);
+}
+
+function selectOB(sym) {
+  selectedOB = sym;
+  if (currentData) {
+    renderOBTabs(currentData.orderbook);
+  }
+}
+
+async function loadData() {
+  const errBanner = document.getElementById("error-banner");
+  try {
+    const res = await fetch(DATA_URL + "?_=" + Date.now());
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    currentData = data;
+    errBanner.style.display = "none";
+
+    renderSpot(data.spot, data.klines);
+    renderDerivatives(data.derivatives);
+    renderOBTabs(data.orderbook);
+
+    const ts = data.timestamp || data.updated_at;
+    document.getElementById("last-update").textContent =
+      "Updated: " + (ts ? new Date(ts).toLocaleTimeString() : "—");
+    document.getElementById("status").innerHTML =
+      'Data loaded &bull; <span>Updated: ' + (ts ? new Date(ts).toLocaleTimeString() : "—") + '</span>';
+  } catch (e) {
+    console.error("Load error:", e);
+    errBanner.style.display = "block";
+    document.getElementById("status").innerHTML = '<span style="color:var(--red)">Load failed</span>';
+  }
+}
+
+function startCountdown() {
+  clearInterval(timer);
+  countdown = 30;
+  document.getElementById("countdown").textContent = countdown;
+  document.getElementById("refresh-progress").value = 30;
+  timer = setInterval(() => {
+    countdown--;
+    document.getElementById("countdown").textContent = Math.max(0, countdown);
+    document.getElementById("refresh-progress").value = Math.max(0, countdown);
+    if (countdown <= 0) {
+      loadData();
+      countdown = 30;
+      document.getElementById("refresh-progress").value = 30;
+    }
+  }, 1000);
+}
+
+loadData().then(startCountdown);
+</script>
+</body>
+</html>

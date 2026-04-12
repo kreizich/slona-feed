@@ -1,0 +1,41 @@
+name: Fetch Derivatives
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # every 5 minutes
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch derivatives data
+        run: python scripts/fetch_derivatives.py
+
+      - name: Commit and push data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/funding_rates.json data/open_interest.json \
+                  data/long_short_ratio.json data/funding_history_*.json \
+                  data/latest.json || true
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: derivatives snapshot $(date -u '+%Y-%m-%d %H:%M') UTC"
+            git push origin ${{ github.ref_name }}
+          fi
