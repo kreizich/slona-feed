@@ -205,9 +205,11 @@ function renderSpot(spot, klines) {
         <div class="stat"><span class="stat-label">24h High</span><span class="stat-value">${fmtPrice(s.high)}</span></div>
         <div class="stat"><span class="stat-label">24h Low</span><span class="stat-value">${fmtPrice(s.low)}</span></div>
         <div class="stat"><span class="stat-label">Volume</span><span class="stat-value">${fmt(s.volume)}</span></div>
-        <div class="stat"><span class="stat-label">Quote Vol</span><span class="stat-value">$${fmt(s.quote_volume)}</span></div>
-        <div class="stat"><span class="stat-label">Trades</span><span class="stat-value">${fmt(s.trades,0)}</span></div>
-        <div class="stat"><span class="stat-label">Avg Price</span><span class="stat-value">${fmtPrice(s.avg_price)}</span></div>
+        <div class="stat"><span class="stat-label">Mkt Cap</span><span class="stat-value">$${fmt(s.market_cap)}</span></div>
+        <div class="stat"><span class="stat-label">1h Chg</span><span class="stat-value" style="color:${(parseFloat(s.price_change_pct_1h||0))>=0?'var(--green)':'var(--red)'}">${parseFloat(s.price_change_pct_1h||0)>=0?'+':''}${fmt(s.price_change_pct_1h||0,2)}%</span></div>
+        <div class="stat"><span class="stat-label">7d Chg</span><span class="stat-value" style="color:${(parseFloat(s.price_change_pct_7d||0))>=0?'var(--green)':'var(--red)'}">${parseFloat(s.price_change_pct_7d||0)>=0?'+':''}${fmt(s.price_change_pct_7d||0,2)}%</span></div>
+        <div class="stat"><span class="stat-label">ATH</span><span class="stat-value">${fmtPrice(s.ath)}</span></div>
+        <div class="stat"><span class="stat-label">ATH Δ</span><span class="stat-value" style="color:var(--red)">${fmt(s.ath_change_pct||0,1)}%</span></div>
       </div>`;
     grid.appendChild(card);
     requestAnimationFrame(() => {
