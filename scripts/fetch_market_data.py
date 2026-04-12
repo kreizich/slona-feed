@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Fetch spot + derivatives 24hr stats, order book, avg price, recent trades.
-Spot:        api.binance.us  (Binance US — accessible from GitHub Actions)
-Derivatives: api.bybit.com   (Bybit V5 — no geo-restrictions, equivalent data)
+Fetch spot market data + CoinGecko market overview.
+Spot prices/orderbook/trades: api.binance.us  (Binance US, no geo-block)
+Market cap / ATH / supply:    api.coingecko.com (free, no key needed)
 """
 import json
 import os
@@ -13,15 +13,23 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
+SYMBOLS   = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
 SPOT_BASE = "https://api.binance.us"
-BYBIT_BASE = "https://api.bybit.com"
+CG_BASE   = "https://api.coingecko.com/api/v3"
+
+CG_IDS = {
+    "BTCUSDT": "bitcoin",
+    "ETHUSDT": "ethereum",
+    "SOLUSDT": "solana",
+    "XRPUSDT": "ripple",
+    "BNBUSDT": "binancecoin",
+}
 
 
 def fetch(url, timeout=20):
     try:
         req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; slona-feed/1.0)",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0",
             "Accept": "application/json",
         })
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -32,7 +40,7 @@ def fetch(url, timeout=20):
             body = e.read().decode()[:300]
         except Exception:
             pass
-        print(f"[ERROR] HTTP {e.code} {e.reason} — {url}\n        body: {body}", flush=True)
+        print(f"[ERROR] HTTP {e.code} {e.reason} — {url}\n        body: {body[:120]}", flush=True)
         return None
     except Exception as e:
         print(f"[ERROR] {type(e).__name__}: {e} — {url}", flush=True)
@@ -40,11 +48,11 @@ def fetch(url, timeout=20):
         return None
 
 
-# ── SPOT (Binance US) ─────────────────────────────────────────────────────────
+# ── Binance US spot ───────────────────────────────────────────────────────────
 
 def fetch_spot_tickers():
     syms_param = "[" + ",".join(f'"{s}"' for s in SYMBOLS) + "]"
-    url = f"{SPOT_BASE}/api/v3/ticker/24hr?symbols={urllib.request.quote(syms_param)}"
+    url  = f"{SPOT_BASE}/api/v3/ticker/24hr?symbols={urllib.request.quote(syms_param)}"
     data = fetch(url)
     if not data:
         return {}
@@ -52,17 +60,17 @@ def fetch_spot_tickers():
     for t in data:
         sym = t["symbol"]
         result[sym] = {
-            "price":             t["lastPrice"],
-            "open":              t["openPrice"],
-            "high":              t["highPrice"],
-            "low":               t["lowPrice"],
-            "close":             t["lastPrice"],
-            "volume":            t["volume"],
-            "quote_volume":      t["quoteVolume"],
-            "trades":            t["count"],
-            "price_change":      t["priceChange"],
-            "price_change_pct":  t["priceChangePercent"],
-            "weighted_avg_price":t["weightedAvgPrice"],
+            "price":              t["lastPrice"],
+            "open":               t["openPrice"],
+            "high":               t["highPrice"],
+            "low":                t["lowPrice"],
+            "close":              t["lastPrice"],
+            "volume":             t["volume"],
+            "quote_volume":       t["quoteVolume"],
+            "trades":             t["count"],
+            "price_change":       t["priceChange"],
+            "price_change_pct":   t["priceChangePercent"],
+            "weighted_avg_price": t["weightedAvgPrice"],
         }
     return result
 
@@ -70,7 +78,7 @@ def fetch_spot_tickers():
 def fetch_avg_prices():
     result = {}
     for sym in SYMBOLS:
-        url = f"{SPOT_BASE}/api/v3/avgPrice?symbol={sym}"
+        url  = f"{SPOT_BASE}/api/v3/avgPrice?symbol={sym}"
         data = fetch(url)
         if data:
             result[sym] = {"avg_price": data["price"], "avg_price_mins": data["mins"]}
@@ -81,7 +89,7 @@ def fetch_avg_prices():
 def fetch_order_books():
     result = {}
     for sym in SYMBOLS:
-        url = f"{SPOT_BASE}/api/v3/depth?symbol={sym}&limit=20"
+        url  = f"{SPOT_BASE}/api/v3/depth?symbol={sym}&limit=20"
         data = fetch(url)
         if data:
             result[sym] = {
@@ -96,16 +104,16 @@ def fetch_order_books():
 def fetch_recent_trades():
     result = {}
     for sym in SYMBOLS:
-        url = f"{SPOT_BASE}/api/v3/trades?symbol={sym}&limit=20"
+        url  = f"{SPOT_BASE}/api/v3/trades?symbol={sym}&limit=20"
         data = fetch(url)
         if data:
             result[sym] = [
                 {
-                    "id":            t["id"],
-                    "price":         t["price"],
-                    "qty":           t["qty"],
-                    "time":          t["time"],
-                    "is_buyer_maker":t["isBuyerMaker"],
+                    "id":             t["id"],
+                    "price":          t["price"],
+                    "qty":            t["qty"],
+                    "time":           t["time"],
+                    "is_buyer_maker": t["isBuyerMaker"],
                 }
                 for t in data[-10:]
             ]
@@ -113,103 +121,51 @@ def fetch_recent_trades():
     return result
 
 
-# ── DERIVATIVES (Bybit V5) ────────────────────────────────────────────────────
+# ── CoinGecko market overview ─────────────────────────────────────────────────
 
-def fetch_bybit_tickers():
+def fetch_coingecko_markets():
     """
-    GET /v5/market/tickers?category=linear
-    Returns funding rate, OI, mark/index price alongside 24h stats.
+    GET /coins/markets — market cap, rank, ATH, circulating supply, etc.
+    One request for all symbols.
     """
-    url = f"{BYBIT_BASE}/v5/market/tickers?category=linear"
+    ids = ",".join(CG_IDS.values())
+    url = (
+        f"{CG_BASE}/coins/markets"
+        f"?vs_currency=usd"
+        f"&ids={ids}"
+        f"&price_change_percentage=1h,24h,7d"
+        f"&sparkline=false"
+    )
     data = fetch(url)
-    if not data or data.get("retCode") != 0:
-        print(f"[ERROR] Bybit tickers: {data}", flush=True)
+    if not data:
         return {}
     result = {}
-    for t in data["result"]["list"]:
-        sym = t["symbol"]
-        if sym in SYMBOLS:
-            result[sym] = {
-                "futures_price":     t.get("lastPrice", "0"),
-                "mark_price":        t.get("markPrice", "0"),
-                "index_price":       t.get("indexPrice", "0"),
-                "funding_rate":      t.get("fundingRate", "0"),
-                "next_funding_time": int(t.get("nextFundingTime", 0)),
-                "open_interest":     t.get("openInterest", "0"),
-                "open_interest_usd": t.get("openInterestValue", "0"),
-                "volume":            t.get("volume24h", "0"),
-                "turnover":          t.get("turnover24h", "0"),
-                "price_change_pct":  str(float(t.get("price24hPcnt", "0")) * 100),
-            }
+    id_to_sym = {v: k for k, v in CG_IDS.items()}
+    for coin in data:
+        sym = id_to_sym.get(coin["id"])
+        if not sym:
+            continue
+        result[sym] = {
+            "market_cap":               coin.get("market_cap", 0),
+            "market_cap_rank":          coin.get("market_cap_rank", 0),
+            "fully_diluted_valuation":  coin.get("fully_diluted_valuation", 0),
+            "circulating_supply":       coin.get("circulating_supply", 0),
+            "total_supply":             coin.get("total_supply", 0),
+            "max_supply":               coin.get("max_supply", 0),
+            "ath":                      coin.get("ath", 0),
+            "ath_change_pct":           coin.get("ath_change_percentage", 0),
+            "ath_date":                 coin.get("ath_date", ""),
+            "price_change_pct_1h":      coin.get("price_change_percentage_1h_in_currency", 0),
+            "price_change_pct_7d":      coin.get("price_change_percentage_7d_in_currency", 0),
+        }
     return result
 
 
-def fetch_bybit_long_short():
-    """GET /v5/market/account-ratio — long/short account ratio."""
-    result = {}
-    for sym in SYMBOLS:
-        url = f"{BYBIT_BASE}/v5/market/account-ratio?category=linear&symbol={sym}&period=1h&limit=1"
-        data = fetch(url)
-        if data and data.get("retCode") == 0:
-            rows = data["result"]["list"]
-            if rows:
-                r = rows[0]
-                buy  = float(r.get("buyRatio",  "0.5"))
-                sell = float(r.get("sellRatio", "0.5"))
-                ratio = (buy / sell) if sell > 0 else 1.0
-                result[sym] = {
-                    "long_short_ratio":  str(round(ratio, 4)),
-                    "long_account_pct":  r.get("buyRatio",  "0.5"),
-                    "short_account_pct": r.get("sellRatio", "0.5"),
-                }
-        time.sleep(0.1)
-    return result
-
-
-def fetch_bybit_taker_ratio():
-    """
-    Bybit doesn't have a direct taker ratio endpoint in V5.
-    Approximate from recent kline taker buy volume (tbv / volume).
-    """
-    result = {}
-    for sym in SYMBOLS:
-        # 1-min kline, last candle
-        url = f"{BYBIT_BASE}/v5/market/kline?category=linear&symbol={sym}&interval=1&limit=2"
-        data = fetch(url)
-        if data and data.get("retCode") == 0:
-            rows = data["result"]["list"]
-            if len(rows) >= 2:
-                # rows[0] is latest (may be incomplete), use rows[1]
-                k = rows[1]
-                # Bybit kline: [startTime, open, high, low, close, volume, turnover]
-                # No taker buy vol in kline — use 0.5 as neutral placeholder
-                result[sym] = {
-                    "taker_buy_sell_ratio": "1.0000",
-                }
-        time.sleep(0.1)
-    return result
-
-
-def fetch_bybit_funding_history():
-    """GET /v5/market/funding/history — last 10 funding rate entries."""
-    result = {}
-    for sym in SYMBOLS:
-        url = f"{BYBIT_BASE}/v5/market/funding/history?category=linear&symbol={sym}&limit=10"
-        data = fetch(url)
-        if data and data.get("retCode") == 0:
-            result[sym] = [
-                {"rate": r["fundingRate"], "time": int(r["fundingRateTimestamp"])}
-                for r in data["result"]["list"]
-            ]
-        time.sleep(0.1)
-    return result
-
-
-# ── MAIN ──────────────────────────────────────────────────────────────────────
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    now = datetime.now(timezone.utc)
-    ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    now     = datetime.now(timezone.utc)
+    ts      = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     unix_ts = int(now.timestamp())
 
     print(f"[{ts}] Fetching market data...", flush=True)
@@ -229,42 +185,23 @@ def main():
     trades = fetch_recent_trades()
     print(f"  Recent trades: {len(trades)} symbols", flush=True)
 
-    bybit_tickers = fetch_bybit_tickers()
-    print(f"  Bybit tickers: {len(bybit_tickers)} symbols", flush=True)
+    cg = fetch_coingecko_markets()
+    print(f"  CoinGecko market data: {len(cg)} symbols", flush=True)
 
-    ls_ratio = fetch_bybit_long_short()
-    print(f"  L/S ratios: {len(ls_ratio)} symbols", flush=True)
-
-    taker = fetch_bybit_taker_ratio()
-    print(f"  Taker ratios: {len(taker)} symbols", flush=True)
-
-    funding_hist = fetch_bybit_funding_history()
-    print(f"  Funding history: {len(funding_hist)} symbols", flush=True)
-
-    # Merge avg prices into spot
+    # Merge avg prices and CoinGecko into spot
     for sym in spot:
         if sym in avg_prices:
             spot[sym].update(avg_prices[sym])
-
-    # Build derivatives section
-    derivatives = {}
-    for sym in SYMBOLS:
-        d = {}
-        if sym in bybit_tickers:
-            d.update(bybit_tickers[sym])
-        if sym in ls_ratio:
-            d.update(ls_ratio[sym])
-        if sym in taker:
-            d.update(taker[sym])
-        derivatives[sym] = d
+        if sym in cg:
+            spot[sym].update(cg[sym])
 
     snapshot = {
-        "timestamp":      ts,
-        "updated_at_unix":unix_ts,
-        "spot":           spot,
-        "derivatives":    derivatives,
-        "orderbook":      orderbook,
-        "recent_trades":  trades,
+        "timestamp":       ts,
+        "updated_at_unix": unix_ts,
+        "spot":            spot,
+        "derivatives":     {sym: {} for sym in SYMBOLS},  # filled by fetch_derivatives
+        "orderbook":       orderbook,
+        "recent_trades":   trades,
     }
 
     os.makedirs("data/history", exist_ok=True)
@@ -273,53 +210,13 @@ def main():
         json.dump(snapshot, f, separators=(",", ":"))
     print("  Saved data/latest.json", flush=True)
 
-    fname = now.strftime("%Y-%m-%d_%H-%M")
+    fname     = now.strftime("%Y-%m-%d_%H-%M")
     hist_path = f"data/history/{fname}.json"
     with open(hist_path, "w") as f:
         json.dump(snapshot, f, separators=(",", ":"))
     print(f"  Saved {hist_path}", flush=True)
 
-    append_time_series("data/funding_rates.json", {
-        "timestamp": ts,
-        "unix": unix_ts,
-        "rates": {sym: derivatives[sym].get("funding_rate", "0") for sym in SYMBOLS},
-    })
-
-    append_time_series("data/open_interest.json", {
-        "timestamp": ts,
-        "unix": unix_ts,
-        "oi":    {sym: derivatives[sym].get("open_interest", "0") for sym in SYMBOLS},
-    })
-
-    append_time_series("data/long_short_ratio.json", {
-        "timestamp": ts,
-        "unix": unix_ts,
-        "ratios": {sym: derivatives[sym].get("long_short_ratio", "1") for sym in SYMBOLS},
-    })
-
-    # Per-symbol funding history
-    for sym, history in funding_hist.items():
-        path = f"data/funding_history_{sym}.json"
-        with open(path, "w") as f:
-            json.dump({"symbol": sym, "updated_at": ts, "history": history}, f, separators=(",", ":"))
-
     print("Done.", flush=True)
-
-
-def append_time_series(path, entry, max_entries=2016):
-    if os.path.exists(path):
-        try:
-            with open(path) as f:
-                data = json.load(f)
-        except Exception:
-            data = []
-    else:
-        data = []
-    data.append(entry)
-    if len(data) > max_entries:
-        data = data[-max_entries:]
-    with open(path, "w") as f:
-        json.dump(data, f, separators=(",", ":"))
 
 
 if __name__ == "__main__":

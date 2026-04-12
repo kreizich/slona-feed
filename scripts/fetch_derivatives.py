@@ -126,34 +126,44 @@ def okx_funding_rate(sym):
 
 
 def okx_mark_index(sym):
-    """GET /api/v5/market/mark-price — mark & index price."""
+    """GET /api/v5/public/mark-price — mark price for SWAP."""
     inst = OKX_INST[sym]
-    url  = f"{OKX_BASE}/api/v5/market/mark-price?instType=SWAP&instId={inst}"
+    url  = f"{OKX_BASE}/api/v5/public/mark-price?instType=SWAP&instId={inst}"
     data = fetch(url)
-    if data and data.get("code") == "0" and data["data"]:
+    if data and data.get("code") == "0" and data.get("data"):
         d = data["data"][0]
-        return {
-            "mark_price":  d.get("markPx", "0"),
-        }
+        return {"mark_price": d.get("markPx", "0")}
     return {}
 
 
 def okx_long_short(sym):
-    """GET /api/v5/rubik/stat/contracts/long-short-account-ratio."""
+    """
+    GET /api/v5/rubik/stat/contracts/long-short-account-ratio
+    OKX response format: [["timestamp", "ratio"], ...]  (just 2 elements per row)
+    The ratio is longAccounts / shortAccounts already computed.
+    """
     ccy = OKX_CCY[sym]
     url = f"{OKX_BASE}/api/v5/rubik/stat/contracts/long-short-account-ratio?ccy={ccy}&period=1H"
     data = fetch(url)
     if data and data.get("code") == "0" and data.get("data"):
-        # Returns [[timestamp, longRatio, shortRatio], ...]  newest last
-        row = data["data"][-1]
-        long_r  = float(row[1])
-        short_r = float(row[2])
-        ratio   = (long_r / short_r) if short_r > 0 else 1.0
-        return {
-            "long_short_ratio":  str(round(ratio, 4)),
-            "long_account_pct":  str(long_r),
-            "short_account_pct": str(short_r),
-        }
+        rows = data["data"]
+        if not rows:
+            return {}
+        row = rows[-1]   # newest
+        if len(row) < 2:
+            return {}
+        try:
+            ratio = float(row[1])
+            # Derive approximate long/short % from ratio: long = ratio/(1+ratio)
+            long_pct  = ratio / (1.0 + ratio)
+            short_pct = 1.0 - long_pct
+            return {
+                "long_short_ratio":  str(round(ratio, 4)),
+                "long_account_pct":  str(round(long_pct, 4)),
+                "short_account_pct": str(round(short_pct, 4)),
+            }
+        except (ValueError, ZeroDivisionError):
+            return {}
     return {}
 
 
