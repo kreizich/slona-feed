@@ -1,0 +1,10 @@
+/data/*
+  Cache-Control: no-store, no-cache, must-revalidate, max-age=0
+  Pragma: no-cache
+  Surrogate-Control: no-store
+
+/data/latest.json
+  Cache-Control: no-store, no-cache, must-revalidate, max-age=0
+  Pragma: no-cache
+  Surrogate-Control: no-store
+  Access-Control-Allow-Origin: *

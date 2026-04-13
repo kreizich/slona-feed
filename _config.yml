@@ -1,0 +1,26 @@
+# GitHub Pages / Jekyll configuration
+title: Slona Feed
+description: Crypto market data pipeline — Binance US + OKX + CoinGecko
+url: "https://kreizich.github.io"
+baseurl: "/slona-feed"
+
+# Don't use Jekyll themes
+theme: null
+
+# Serve all files including data/ directory
+include:
+  - _headers
+  - data
+
+# Exclude development files from build
+exclude:
+  - scripts/
+  - "*.sh"
+  - .github/
+
+# Disable Jekyll processing of JSON files so they're served as-is
+defaults:
+  - scope:
+      path: "data"
+    values:
+      layout: null
