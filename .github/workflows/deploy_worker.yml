@@ -12,29 +12,46 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --minify
+          node-version: "20"
+
+      - name: Install Wrangler
+        run: npm install -g wrangler@3
+
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: wrangler deploy --minify --log-level debug
 
       - name: Smoke test
         run: |
-          sleep 5
-          echo "Testing worker endpoint..."
-          curl -sf "https://slona-feed.kreizi-ch.workers.dev" \
-            -D - -o /tmp/worker_response.json | head -20
-          echo "--- timestamp from response ---"
-          python3 -c "
-          import json, sys
+          echo "Waiting for propagation..."
+          sleep 8
+          WORKER_URL="https://slona-feed.kreizi-ch.workers.dev"
+          echo "Testing: $WORKER_URL"
+          HTTP_CODE=$(curl -s -o /tmp/worker_response.json -w "%{http_code}" \
+            -H "Cache-Control: no-cache" "$WORKER_URL")
+          echo "HTTP status: $HTTP_CODE"
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "Response headers check:"
+            curl -sI "$WORKER_URL" | grep -i -E "cache-control|x-fetched|content-type|access-control"
+            echo "--- JSON timestamp ---"
+            python3 -c "
+          import json
           d = json.load(open('/tmp/worker_response.json'))
           print('timestamp :', d.get('timestamp'))
-          print('updated_at:', d.get('updated_at_unix'))
-          print('BTC price :', d.get('spot', {}).get('BTCUSDT', {}).get('price'))
-          " || echo "Could not parse response (worker may need a moment to propagate)"
+          print('BTC price :', d.get('spot', {}).get('BTCUSDT', {}).get('price', 'n/a'))
+          print('BTC mktcap:', d.get('spot', {}).get('BTCUSDT', {}).get('market_cap', 'n/a'))
+            "
+          else
+            echo "Non-200 response:"
+            cat /tmp/worker_response.json
+          fi

@@ -2,10 +2,4 @@ name            = "slona-feed"
 main            = "workers/index.js"
 compatibility_date = "2024-09-23"
 workers_dev     = true
-
-# Account ID is injected via CLOUDFLARE_ACCOUNT_ID secret in CI,
-# or set here for local `wrangler deploy`
-account_id = "cfut_E3ikp0J5Ebe2MfuHiT5JQBaZdpW7mY9rWh3r6FeFca53efef"
-
-[observability]
-enabled = true
+# account_id is injected by wrangler-action via CLOUDFLARE_ACCOUNT_ID env var
