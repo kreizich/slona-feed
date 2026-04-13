@@ -195,18 +195,34 @@ def main():
         if sym in cg:
             spot[sym].update(cg[sym])
 
+    # Preserve existing derivatives if present — fetch_derivatives.py owns that section
+    existing_derivatives = {sym: {} for sym in SYMBOLS}
+    existing_klines = {}
+    latest_path = "data/latest.json"
+    if os.path.exists(latest_path):
+        try:
+            with open(latest_path) as f:
+                prev = json.load(f)
+            existing_derivatives = prev.get("derivatives", existing_derivatives)
+            existing_klines      = prev.get("klines", {})
+            print("  Preserved existing derivatives and klines from latest.json", flush=True)
+        except Exception:
+            pass
+
     snapshot = {
         "timestamp":       ts,
         "updated_at_unix": unix_ts,
         "spot":            spot,
-        "derivatives":     {sym: {} for sym in SYMBOLS},  # filled by fetch_derivatives
+        "derivatives":     existing_derivatives,
         "orderbook":       orderbook,
         "recent_trades":   trades,
     }
+    if existing_klines:
+        snapshot["klines"] = existing_klines
 
     os.makedirs("data/history", exist_ok=True)
 
-    with open("data/latest.json", "w") as f:
+    with open(latest_path, "w") as f:
         json.dump(snapshot, f, separators=(",", ":"))
     print("  Saved data/latest.json", flush=True)
 

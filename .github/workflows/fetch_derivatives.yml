@@ -28,6 +28,20 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Test connectivity
+        run: |
+          echo "=== OKX ==="
+          curl -sf --max-time 8 "https://www.okx.com/api/v5/market/tickers?instType=SWAP" \
+            -o /tmp/okx.json && python3 -c "
+          import json; d=json.load(open('/tmp/okx.json'))
+          syms=[t['instId'] for t in d.get('data',[]) if 'USDT-SWAP' in t.get('instId','')][:5]
+          print('OKX OK —', len(d.get(\"data\",[])), 'instruments, sample:', syms)
+          " || echo "OKX FAILED"
+          echo "=== Gate.io ==="
+          curl -sf --max-time 8 "https://api.gateio.ws/api/v4/futures/usdt/tickers?contract=BTC_USDT" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print('Gate.io OK — last:', d[0].get('last'))" \
+            || echo "Gate.io FAILED"
+
       - name: Fetch derivatives data
         run: python scripts/fetch_derivatives.py
 
