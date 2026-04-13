@@ -1,0 +1,40 @@
+name: Deploy Cloudflare Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "workers/**"
+      - "wrangler.toml"
+      - ".github/workflows/deploy_worker.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --minify
+
+      - name: Smoke test
+        run: |
+          sleep 5
+          echo "Testing worker endpoint..."
+          curl -sf "https://slona-feed.kreizi-ch.workers.dev" \
+            -D - -o /tmp/worker_response.json | head -20
+          echo "--- timestamp from response ---"
+          python3 -c "
+          import json, sys
+          d = json.load(open('/tmp/worker_response.json'))
+          print('timestamp :', d.get('timestamp'))
+          print('updated_at:', d.get('updated_at_unix'))
+          print('BTC price :', d.get('spot', {}).get('BTCUSDT', {}).get('price'))
+          " || echo "Could not parse response (worker may need a moment to propagate)"
