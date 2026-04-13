@@ -40,8 +40,9 @@ GATE_SYM = {
     "BNBUSDT": "BNB_USDT",
 }
 
-OKX_BASE  = "https://www.okx.com"
-GATE_BASE = "https://api.gateio.ws/api/v4"
+OKX_BASE   = "https://www.okx.com"
+GATE_BASE  = "https://api.gateio.ws/api/v4"
+FAPI_BASE  = "https://fapi.binance.com"
 MAX_ENTRIES = 2016
 
 
@@ -99,15 +100,59 @@ def okx_tickers():
         sym  = next((s for s, i in OKX_INST.items() if i == inst), None)
         if not sym:
             continue
+        # oiCcy = open interest in base currency (BTC, ETH, etc.) — NOT USD
+        # Multiply by last price to get USD value
+        oi_ccy     = t.get("oiCcy", "0")
+        last_price = t.get("last", "0")
+        try:
+            oi_usd = str(round(float(oi_ccy) * float(last_price), 2))
+        except (ValueError, TypeError):
+            oi_usd = "0"
         result[sym] = {
-            "futures_price": t.get("last", "0"),
-            "open":          t.get("open24h", "0"),
-            "high":          t.get("high24h", "0"),
-            "low":           t.get("low24h", "0"),
-            "volume":        t.get("vol24h", "0"),
-            "open_interest": t.get("oi", "0"),
-            "open_interest_usd": t.get("oiCcy", "0"),
+            "futures_price":     t.get("last", "0"),
+            "open":              t.get("open24h", "0"),
+            "high":              t.get("high24h", "0"),
+            "low":               t.get("low24h", "0"),
+            "volume":            t.get("vol24h", "0"),
+            "open_interest":     t.get("oi", "0"),
+            "open_interest_usd": oi_usd,
         }
+    return result
+
+
+# ── Binance fapi OI (try first, may be geo-blocked) ───────────────────────────
+
+def binance_fapi_oi():
+    """
+    GET /fapi/v1/openInterest — Binance futures open interest.
+    May return HTTP 451 from GitHub Actions (geo-block); silently skip if so.
+    Returns dict keyed by symbol with open_interest and open_interest_usd.
+    """
+    # First fetch all tickers for prices (needed to compute USD value)
+    url_ticker = f"{FAPI_BASE}/fapi/v1/ticker/price"
+    prices_data = fetch(url_ticker)
+    prices = {}
+    if prices_data and isinstance(prices_data, list):
+        for p in prices_data:
+            prices[p["symbol"]] = p.get("price", "0")
+
+    result = {}
+    for sym in SYMBOLS:
+        url = f"{FAPI_BASE}/fapi/v1/openInterest?symbol={sym}"
+        data = fetch(url)
+        if not data:
+            return {}   # likely geo-blocked; bail out entirely
+        oi_contracts = data.get("openInterest", "0")
+        price = prices.get(sym, "0")
+        try:
+            oi_usd = str(round(float(oi_contracts) * float(price), 2))
+        except (ValueError, TypeError):
+            oi_usd = "0"
+        result[sym] = {
+            "open_interest":     oi_contracts,
+            "open_interest_usd": oi_usd,
+        }
+        time.sleep(0.1)
     return result
 
 
@@ -222,9 +267,23 @@ def main():
 
     os.makedirs("data", exist_ok=True)
 
+    # ── Try Binance fapi for OI first (best accuracy; may be geo-blocked) ──
+    print("  Trying Binance fapi for open interest...", flush=True)
+    fapi_oi = binance_fapi_oi()
+    if fapi_oi:
+        print(f"  Binance fapi OI: {len(fapi_oi)} symbols", flush=True)
+    else:
+        print("  Binance fapi unavailable — will use OKX OI (oiCcy * price)", flush=True)
+
     # ── OKX bulk ticker (1 request for all symbols) ──
     okx_tick = okx_tickers()
     print(f"  OKX tickers: {len(okx_tick)} symbols", flush=True)
+
+    # Overlay Binance fapi OI if available (more accurate than OKX estimate)
+    if fapi_oi:
+        for sym, oi_data in fapi_oi.items():
+            if sym in okx_tick:
+                okx_tick[sym].update(oi_data)
 
     use_gate = len(okx_tick) == 0   # fall back to Gate.io if OKX bulk failed
 
