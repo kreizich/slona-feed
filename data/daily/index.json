@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-05-10T04:09:09Z",
-  "days": 28,
+  "updated_at": "2026-05-11T04:19:20Z",
+  "days": 29,
   "entries": [
     {
       "date": "2026-04-12",
@@ -365,6 +365,19 @@
       "XRPUSDT_change_pct": 0.1551,
       "BNBUSDT_close": "648.87000000",
       "BNBUSDT_change_pct": -0.1569
+    },
+    {
+      "date": "2026-05-10",
+      "BTCUSDT_close": "82154.40000000",
+      "BTCUSDT_change_pct": 1.8036,
+      "ETHUSDT_close": "2369.72000000",
+      "ETHUSDT_change_pct": 1.8157,
+      "SOLUSDT_close": "96.38000000",
+      "SOLUSDT_change_pct": 3.5787,
+      "XRPUSDT_close": "1.47460000",
+      "XRPUSDT_change_pct": 3.8012,
+      "BNBUSDT_close": "664.45000000",
+      "BNBUSDT_change_pct": 2.2482
     }
   ]
 }
