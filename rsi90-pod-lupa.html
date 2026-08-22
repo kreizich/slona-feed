@@ -1,0 +1,745 @@
+<title>RSI 90 под лупа</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@600;700&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --paper: #faf9f7;
+    --surface: #fcfcfb;
+    --raised: #f3f1ec;
+    --ink: #16150f;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --line: #e3e1d9;
+    --line-strong: #c9c7bd;
+    --accent: #b06b10;
+    --accent-soft: rgba(176, 107, 16, 0.09);
+    --pos: #1c5cab;
+    --neg: #b23331;
+    --bar-pos: #2a78d6;
+    --bar-neg: #e34948;
+    --grid: #e1e0d9;
+    --baseline: #c3c2b7;
+    --good: #0ca30c;
+    --warn: #fab219;
+    --serious: #ec835a;
+    --crit: #d03b3b;
+    --shadow: 0 1px 2px rgba(22, 21, 15, 0.05), 0 4px 16px rgba(22, 21, 15, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #111110;
+      --surface: #1a1a19;
+      --raised: #232322;
+      --ink: #f2f1ea;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --line: #2c2c2a;
+      --line-strong: #43423e;
+      --accent: #e8a33d;
+      --accent-soft: rgba(232, 163, 61, 0.12);
+      --pos: #5598e7;
+      --neg: #e66767;
+      --bar-pos: #3987e5;
+      --bar-neg: #e66767;
+      --grid: #2c2c2a;
+      --baseline: #383835;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #111110;
+    --surface: #1a1a19;
+    --raised: #232322;
+    --ink: #f2f1ea;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --line: #2c2c2a;
+    --line-strong: #43423e;
+    --accent: #e8a33d;
+    --accent-soft: rgba(232, 163, 61, 0.12);
+    --pos: #5598e7;
+    --neg: #e66767;
+    --bar-pos: #3987e5;
+    --bar-neg: #e66767;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 48px 20px 72px;
+  }
+  a { color: var(--accent); }
+
+  /* --- заглавна част --- */
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-weight: 700;
+    font-size: clamp(30px, 5vw, 42px);
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: 62ch;
+    margin: 0 0 14px;
+  }
+  .meta {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 0 0 34px;
+  }
+
+  /* --- присъда --- */
+  .verdict {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 20px 22px;
+    margin: 0 0 52px;
+  }
+  .verdict h2 {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+    margin: 0 0 14px;
+  }
+  .verdict ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .verdict li { display: flex; gap: 12px; align-items: baseline; }
+  .chip {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    padding: 2px 9px 2px 7px;
+    border-radius: 99px;
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: var(--ink-2);
+    white-space: nowrap;
+    transform: translateY(-1px);
+  }
+  .chip::before {
+    content: "";
+    width: 8px; height: 8px;
+    border-radius: 99px;
+    background: var(--muted);
+  }
+  .chip.ok::before   { background: var(--good); }
+  .chip.warn::before { background: var(--warn); }
+  .chip.bad::before  { background: var(--crit); }
+  .chip.miss::before { background: var(--serious); }
+
+  /* --- секции --- */
+  section { margin: 0 0 54px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    border-top: 1px solid var(--line-strong);
+    padding-top: 18px;
+    margin-bottom: 16px;
+  }
+  .sec-num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  h2.sec-title {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-weight: 600;
+    font-size: 24px;
+    line-height: 1.25;
+    margin: 0;
+    text-wrap: balance;
+  }
+  section p { max-width: 68ch; margin: 0 0 14px; }
+  section ul.plain { max-width: 68ch; margin: 0 0 14px; padding-left: 22px; }
+  section ul.plain li { margin-bottom: 8px; }
+  strong { font-weight: 600; }
+  .num { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.93em; }
+  .pos { color: var(--pos); }
+  .neg { color: var(--neg); }
+
+  /* --- статистики-плочки --- */
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin: 26px 0 0;
+  }
+  .tile {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px 12px;
+  }
+  .tile .t-label {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.35;
+    margin-bottom: 6px;
+  }
+  .tile .t-value {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 26px;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+  }
+  .tile .t-note { font-size: 12.5px; color: var(--ink-2); margin-top: 5px; line-height: 1.4; }
+
+  /* --- таблици --- */
+  .tbl-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    margin: 18px 0 10px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 560px;
+    font-size: 13.5px;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    padding: 14px 16px 4px;
+    font-weight: 600;
+    font-size: 14.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 14px;
+    border-top: 1px solid var(--line);
+    vertical-align: top;
+  }
+  thead th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-top: none;
+    white-space: nowrap;
+  }
+  td.n, th.n { text-align: right; font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
+  tr.hl td { background: var(--accent-soft); }
+  tr.hl td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  .tbl-note { font-size: 13px; color: var(--muted); max-width: 68ch; margin: 0 0 6px; }
+
+  /* --- графика --- */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 18px 18px 12px;
+    margin: 22px 0 10px;
+  }
+  .chart-title { font-weight: 600; font-size: 14.5px; margin: 0 0 2px; }
+  .chart-sub { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    margin: 4px 0 10px;
+  }
+  .legend .key { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; }
+  .sw-pos { background: var(--bar-pos); }
+  .sw-neg { background: var(--bar-neg); }
+  #chart svg { display: block; width: 100%; height: auto; }
+  #chart .bar { cursor: default; outline: none; }
+  #chart .bar:focus-visible { stroke: var(--ink); stroke-width: 2px; }
+  .tooltip {
+    position: fixed;
+    z-index: 20;
+    pointer-events: none;
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 12.5px;
+    line-height: 1.45;
+    padding: 7px 10px;
+    border-radius: 7px;
+    max-width: 240px;
+    opacity: 0;
+    visibility: hidden;
+  }
+  .tooltip .tt-v { font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 500; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tooltip { transition: opacity 0.12s ease; }
+  }
+
+  /* --- карта „сега" --- */
+  .now-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 18px 22px;
+    margin: 18px 0 14px;
+  }
+  .now-card p { margin: 0 0 10px; }
+  .now-card p:last-child { margin-bottom: 0; }
+
+  /* --- дребен шрифт --- */
+  .fine {
+    border-top: 1px solid var(--line-strong);
+    padding-top: 18px;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .fine p { max-width: 75ch; margin: 0 0 10px; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Проверка с данни · 22 август 2026</p>
+    <h1>Какво наистина следва след 4-часов RSI над 90 при биткойн</h1>
+    <p class="standfirst">
+      Из чатовете обикаля AI-генерирана таблица с „исторически случаи на 4h RSI &gt; 90" и извода,
+      че следва пауза, но „трендът вече не е бичи". Преизчислихме всичко от нулата върху пълната
+      история на Binance — всяка 4-часова свещ от 2017 г. насам. Ето какво излиза.
+    </p>
+    <p class="meta">данни: Binance spot BTCUSDT · 4h · 17.08.2017 – 22.08.2026 · 19 738 свещи · RSI(14), Wilder</p>
+  </header>
+
+  <div class="verdict">
+    <h2>Присъдата накратко</h2>
+    <ul>
+      <li><span class="chip warn">наполовина</span><span>Таблицата: 4 от 6 реда са точни, един е с грешни числа, а един (декември 2017) изобщо не съществува в данните на Binance.</span></li>
+      <li><span class="chip bad">подбрана</span><span>Липсват ѝ и трите епизода след януари 2023 — и трите завършиха с продължение нагоре. Без тях извадката изглежда по-мечи, отколкото е.</span></li>
+      <li><span class="chip ok">вярна теза</span><span>Изводът „пауза, не голям обрат" обаче се потвърждава — и то по-силно от собствената ѝ таблица: ден 1 обикновено е червен, месец по-късно 7 от 8 случая са зелени.</span></li>
+      <li><span class="chip miss">без опора</span><span>Добавката „а трендът не е бичи" (в смисъл „значи е по-опасно") няма покритие: най-лошият исторически случай е бил в „бичи" тренд, а единственият „мечи" — най-силното продължение.</span></li>
+    </ul>
+  </div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2 class="sec-title">Какво се твърди</h2></div>
+    <p>
+      RSI (Relative Strength Index) е индикатор 0–100 за скоростта на движението; над 70 се приема за
+      „прегряло". Стойност <strong>над 90 на 4-часова графика</strong> е истинска рядкост — и точно това
+      се случи тази седмица. Таблицата от чата изброява шест исторически случая (2017–2023) с предимно
+      червени проценти на 1-вия, 3-тия и 7-ия ден след пика и заключава: екстремното прегряване обикновено
+      води до „здравословна пауза", не непременно до обрат — <em>особено ако по-големият тренд е бичи</em>.
+      Скептичната добавка към препратката: „а той не е бичи".
+    </p>
+    <p>Проверяваме три неща: верни ли са редовете, пълен ли е списъкът и издържа ли тренд-аргументът.</p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2 class="sec-title">Как проверихме</h2></div>
+    <p>
+      Смъкнахме всички 4-часови свещи на BTCUSDT от Binance (спот) от август 2017 до днес и изчислихме
+      RSI(14) по стандартната формула (Wilder). <strong>Епизод</strong> наричаме група от барове с RSI ≥ 90,
+      разделени с по-малко от 7 дни; пауза над 7 дни започва нов епизод. За всеки епизод мерим две неща:
+    </p>
+    <ul class="plain">
+      <li><strong>от сигнала</strong> — възвръщаемостта след затварянето на <em>първия</em> бар с RSI ≥ 90.
+        Това е единствената търгуема гледна точка: в реално време знаеш само, че 90 е пресечено;</li>
+      <li><strong>от пика</strong> — след бара с най-висок RSI. Така смята таблицата от чата, но пикът се
+        разпознава единствено със задна дата.</li>
+    </ul>
+    <p>
+      И решаващата стъпка, която подобни таблици винаги пропускат: <strong>базова линия</strong>. BTC има
+      възходящ дрифт — „+X% след месец" не значи нищо, докато не го сравниш със същия хоризонт за
+      <em>всички</em> 19 738 свещи. Първите 200 бара са изключени (индикаторът още се стабилизира),
+      затова стартовият шум от август 2017 не участва.
+    </p>
+    <div class="tiles">
+      <div class="tile">
+        <div class="t-label">свещи с RSI ≥ 90</div>
+        <div class="t-value num">25 от 19 538</div>
+        <div class="t-note">0,13% от всички — веднъж-два пъти годишно</div>
+      </div>
+      <div class="tile">
+        <div class="t-label">епизоди за 9 години</div>
+        <div class="t-value num">9</div>
+        <div class="t-note">8 приключили + текущият от 20 август</div>
+      </div>
+      <div class="tile">
+        <div class="t-label">RSI на пика сега</div>
+        <div class="t-value num">94,3</div>
+        <div class="t-note">№2 в цялата история — рекордът е 95,0 (април 2019)</div>
+      </div>
+      <div class="tile">
+        <div class="t-label">голям срив след сигнала</div>
+        <div class="t-value num">1 от 8</div>
+        <div class="t-note">юни 2019: −19% за седмица</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2 class="sec-title">Сверка на таблицата, ред по ред</h2></div>
+    <p>
+      Сравняваме по нейната методология — от бара с най-висок RSI. Четири реда излизат точни до
+      десетата. Два — не.
+    </p>
+    <div class="tbl-wrap">
+      <table>
+        <caption>Заявено в чат-таблицата срещу преизчисленото (+1 / +3 / +7 дни от пика)</caption>
+        <thead>
+          <tr><th>Ред от таблицата</th><th>Какво показват данните</th><th>Присъда</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>07.12.2017 · RSI ~90,7 · ~$16 950<br><span class="num neg">−9,7 / −8 / −1%</span></td>
+            <td>Никакъв епизод ≥ 90 около тази дата. Максимумът за цялата мания ноември 2017 – януари 2018 е <span class="num">RSI 87,2</span> (29.11, ~$10 776). Друга борса — цените тогава се разминаваха силно между площадките — или направо измислен ред.</td>
+            <td><span class="chip bad">не съществува</span></td>
+          </tr>
+          <tr>
+            <td>03.04.2019 · RSI ~90,5 · ~$5 070<br><span class="num neg">−2,8 / −1,6</span><span class="num pos"> / +1,9%</span></td>
+            <td>Епизодът е реален, но пикът е <span class="num">RSI 95,0</span> — най-високият в цялата история, не 90,5. И връщанията са други: <span class="num neg">−1,3 / −0,2</span><span class="num pos"> / +3,5%</span>.</td>
+            <td><span class="chip warn">грешни числа</span></td>
+          </tr>
+          <tr>
+            <td>26.06.2019 · RSI ~91,5 · ~$13 700<br><span class="num neg">−20 / −13 / −18%</span></td>
+            <td>Потвърден: <span class="num">RSI 93,2</span>, $13 961, <span class="num neg">−21,1 / −14,8 / −19,4%</span>. Единственият истински срив в извадката.</td>
+            <td><span class="chip ok">точен</span></td>
+          </tr>
+          <tr>
+            <td>30.04.2020 · RSI ~93,0 · ~$9 300<br><span class="num neg">−6,7 / −1,7</span><span class="num"> / ~0%</span></td>
+            <td>Потвърден: <span class="num">RSI 92,6</span>, $9 289, <span class="num neg">−6,6 / −1,7</span><span class="num"> / +0,0%</span>.</td>
+            <td><span class="chip ok">точен</span></td>
+          </tr>
+          <tr>
+            <td>17.12.2020 · RSI ~90,2 · ~$23 300<br><span class="num neg">−3,3</span><span class="num pos"> / +2,4</span><span class="num neg"> / −0,5%</span></td>
+            <td>Потвърден: <span class="num">RSI 90,5</span>, $23 334, <span class="num neg">−3,4</span><span class="num pos"> / +2,3</span><span class="num neg"> / −0,4%</span>. Бележка под линия: месец по-късно цената е <span class="num pos">+60%</span>.</td>
+            <td><span class="chip ok">точен</span></td>
+          </tr>
+          <tr>
+            <td>14.01.2023 · RSI ~92,5 · ~$21 000<br><span class="num neg">−1,2</span><span class="num pos"> / +0,7 / +7,5%</span></td>
+            <td>Потвърден: <span class="num">RSI 92,6</span>, $20 967, <span class="num neg">−1,2</span><span class="num pos"> / +0,8 / +7,5%</span>.</td>
+            <td><span class="chip ok">точен</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      По-съществен от грешните редове е <strong>подборът</strong>: таблицата свършва в януари 2023, а след
+      това има още три епизода — <span class="num">21.06.2023</span>, <span class="num">24.10.2023</span> и
+      <span class="num">28.02.2024</span>. Седмица по-късно и трите са на нула или на плюс
+      (<span class="num pos">+1,9%</span>, <span class="num pos">+0,4%</span>, <span class="num pos">+5,8%</span>),
+      месец по-късно — <span class="num">+0,0%</span>, <span class="num pos">+9,5%</span> и
+      <span class="num pos">+11,9%</span>. Изрязани са точно случаите, които противоречат на мечия прочит —
+      класически белег на AI-таблица, сглобена по спомен от тренировъчни данни: верни котви, приблизителни
+      числа, история до определен момент.
+    </p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2 class="sec-title">Пълната картина: всичките 9 епизода</h2></div>
+    <p>
+      Оттук нататък гледаме търгуемата перспектива — от затварянето на първия бар, пресякъл 90
+      („от сигнала"). Последният ред е текущият епизод; хоризонтите му още не са изтекли.
+    </p>
+    <div class="tbl-wrap">
+      <table>
+        <caption>Всички епизоди с 4h RSI ≥ 90 (Binance, 2017–2026) — възвръщаемост от сигнала</caption>
+        <thead>
+          <tr>
+            <th>Епизод</th><th class="n">пик RSI</th><th class="n">цена@пик</th>
+            <th class="n">+1д</th><th class="n">+3д</th><th class="n">+7д</th><th class="n">+30д</th>
+            <th class="n">спад 7д</th><th class="n">ръст 7д</th><th>тренд при сигнала</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>апр 2019</td><td class="n">95,0</td><td class="n">5 001</td><td class="n pos">+6,1%</td><td class="n pos">+6,4%</td><td class="n pos">+10,8%</td><td class="n pos">+16,4%</td><td class="n">−0,6%</td><td class="n">+14,2%</td><td>под 200д · −77% от ATH</td></tr>
+          <tr><td>юни 2019</td><td class="n">93,2</td><td class="n">13 961</td><td class="n neg">−21,1%</td><td class="n neg">−14,8%</td><td class="n neg">−19,4%</td><td class="n neg">−29,5%</td><td class="n">−30,3%</td><td class="n">+0,1%</td><td>над 200д · −29% от ATH</td></tr>
+          <tr><td>апр 2020</td><td class="n">92,6</td><td class="n">9 289</td><td class="n neg">−6,6%</td><td class="n neg">−1,7%</td><td class="n">+0,0%</td><td class="n pos">+1,2%</td><td class="n">−9,6%</td><td class="n">+1,8%</td><td>над 200д · −53% от ATH</td></tr>
+          <tr><td>дек 2020</td><td class="n">90,5</td><td class="n">23 334</td><td class="n neg">−3,4%</td><td class="n pos">+2,3%</td><td class="n neg">−0,4%</td><td class="n pos">+60,5%</td><td class="n">−6,5%</td><td class="n">+4,1%</td><td>над 200д · −2% от ATH</td></tr>
+          <tr><td>ян 2023</td><td class="n">92,6</td><td class="n">20 967</td><td class="n neg">−1,2%</td><td class="n pos">+0,8%</td><td class="n pos">+7,5%</td><td class="n pos">+4,0%</td><td class="n">−3,5%</td><td class="n">+8,7%</td><td>над 200д · −70% от ATH</td></tr>
+          <tr><td>юни 2023</td><td class="n">91,6</td><td class="n">30 112</td><td class="n">−0,0%</td><td class="n pos">+1,8%</td><td class="n pos">+1,9%</td><td class="n">+0,0%</td><td class="n">−1,1%</td><td class="n">+5,3%</td><td>над 200д · −57% от ATH</td></tr>
+          <tr><td>окт 2023</td><td class="n">90,5</td><td class="n">34 062</td><td class="n neg">−0,2%</td><td class="n pos">+0,2%</td><td class="n pos">+0,4%</td><td class="n pos">+9,5%</td><td class="n">−2,5%</td><td class="n">+3,1%</td><td>над 200д · −51% от ATH</td></tr>
+          <tr><td>фев 2024</td><td class="n">91,0</td><td class="n">62 432</td><td class="n neg">−2,1%</td><td class="n neg">−0,7%</td><td class="n pos">+5,8%</td><td class="n pos">+11,9%</td><td class="n">−5,5%</td><td class="n">+10,5%</td><td>над 200д · −10% от ATH</td></tr>
+          <tr class="hl"><td>авг 2026 · тече</td><td class="n">94,3</td><td class="n">77 222</td><td class="n pos">+6,0%</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">−0,3%*</td><td class="n">+9,4%*</td><td>над 200д (отскоро) · −42% от ATH</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="tbl-note">
+      „Спад/ръст 7д" = най-ниската/най-високата точка през седмицата след сигнала, спрямо затварянето му.
+      * — натрупано до 22.08, 08:00 UTC. ATH = исторически връх към момента на сигнала.
+    </p>
+
+    <div class="chart-card">
+      <p class="chart-title">Същите 8 приключили епизода, в три хоризонта</p>
+      <p class="chart-sub">Възвръщаемост от затварянето на първия бар с RSI ≥ 90 · обща скала за трите панела</p>
+      <div class="legend">
+        <span class="key"><span class="swatch sw-pos"></span>цената е по-високо</span>
+        <span class="key"><span class="swatch sw-neg"></span>цената е по-ниско</span>
+      </div>
+      <div id="chart" role="img" aria-label="Стълбовидна графика в три панела: възвръщаемост 1 ден, 7 дни и 30 дни след сигнала за всеки от осемте епизода. Ден 1 е предимно леко негативен, ден 30 — предимно позитивен; юни 2019 е големият негативен случай и в трите панела."></div>
+      <p class="chart-sub" style="margin-top:8px">
+        Прочитът е в контраста между панелите: горният (1 ден) е предимно ситно червен, долният (30 дни) —
+        предимно зелено-син, с едно голямо изключение. Текущият епизод не е в графиката.
+      </p>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <caption>Обобщено: медиана след сигнала срещу базовата линия (всички свещи)</caption>
+        <thead>
+          <tr><th>Хоризонт</th><th class="n">RSI ≥ 90 медиана</th><th class="n">червени случаи</th><th class="n">база медиана</th><th class="n">червени в базата</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>+1 ден</td><td class="n neg">−1,6%</td><td class="n">7 от 8</td><td class="n">+0,1%</td><td class="n">48%</td></tr>
+          <tr><td>+3 дни</td><td class="n pos">+0,5%</td><td class="n">3 от 8</td><td class="n">+0,3%</td><td class="n">47%</td></tr>
+          <tr><td>+7 дни</td><td class="n pos">+1,2%</td><td class="n">2 от 8</td><td class="n">+0,5%</td><td class="n">47%</td></tr>
+          <tr><td>+30 дни</td><td class="n pos">+6,8%</td><td class="n">1 от 8</td><td class="n">+1,5%</td><td class="n">46%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Преводът: единственият систематичен ефект е <strong>охлаждане на следващия ден</strong> — 7 от 8
+      случая са червени при база 48%. Седмица по-късно няма и следа от „обратен" сигнал, а месец по-късно
+      моментумът по-често е продължил (7 от 8 на плюс, медиана далеч над базата). Типичната седмица след
+      сигнала е двупосочно разтърсване: медианен спад −4,5% <em>и</em> медианен ръст +4,7% в същия прозорец.
+      Опашният риск обаче е истински: веднъж от осем (юни 2019) седмицата завърши −19%, с дъно −30%.
+    </p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2 class="sec-title">„А трендът не е бичи" — издържа ли аргументът?</h2></div>
+    <p>
+      Идеята звучи логично: прегряване в слаб тренд би трябвало да е по-опасно. Данните казват обратното.
+      Единственият епизод <strong>под</strong> 200-дневната средна — април 2019, свежо възстановяване от
+      дъното на мечия пазар — е <em>най-бичият</em> изход в цялата извадка
+      (<span class="num pos">+10,8%</span> за седмица, <span class="num pos">+16,4%</span> за месец).
+      А катастрофата от юни 2019 се случи <strong>над</strong> 200-дневната, в „бичи" тренд по учебник.
+      Един случай срещу седем не доказва нищо — но интуицията „не-бичи тренд → по-лош изход" няма и
+      един пример в своя полза.
+    </p>
+    <p>
+      И какъв всъщност е трендът днес, по числата: цената пресече 200-дневната средна ($69 011)
+      нагоре <strong>едва на 19 август</strong> — преди това беше под нея от ноември 2025. Пазарът е на
+      −39% от историческия връх ($126 200, октомври 2025), а седмичният RSI е едва <span class="num">38,8</span> —
+      големите таймфреймове изобщо не са прегрели. Това е класическа <em>възстановителна</em> структура.
+      Двата исторически епизода, които най-много приличат на нея — дълбоко под върха, пробив нагоре от
+      скорошна мечка: април 2019 и януари 2023 — са двете най-ясни продължения в извадката. Два случая са
+      съвпадение, не правило; но сочат в обратната посока на страха.
+    </p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><h2 class="sec-title">Къде сме в момента</h2></div>
+    <div class="now-card">
+      <p>
+        Сигналът дойде в <strong>четвъртък, 20.08, 16:00 UTC</strong> — затваряне $72 691 при RSI 90,1.
+        Пикът: петъчният обеден бар с фитил до <strong>$79 500</strong> и RSI <strong>94,3</strong> —
+        вторият най-висок 4-часов RSI в цялата история на Binance (рекордът 95,0 е от април 2019) и
+        първи епизод от 2,5 години насам. Девет бара задържаха RSI над 90 — над една трета от всички
+        такива свещи за 9 години се случиха тази седмица.
+      </p>
+      <p>
+        Типичното „охлаждане на ден 1" този път не дойде — първият ден след сигнала беше
+        <span class="num pos">+6,0%</span>, най-силният в извадката. Затова пък съботната сутрин донесе
+        разтърсването от медианния сценарий: рязък флъш с масови ликвидации на дълги позиции
+        (~$550 млн за час по агрегаторите) и връщане. Дотук спрямо сигнала: максимум
+        <span class="num pos">+9,4%</span>, минимум <span class="num">−0,3%</span>; цена $77 130 към
+        22.08, 08:00 UTC.
+      </p>
+    </div>
+    <p>
+      Ако историята е ориентир, следващата седмица е монета с широко двупосочно разтърсване, а месецът —
+      с наклон към продължение; изключението юни 2019 напомня защо нивата за инвалидация са по-полезни
+      от убежденията.
+    </p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">07</span><h2 class="sec-title">Изводи</h2></div>
+    <ul class="plain">
+      <li><strong>Таблицата от чата е наполовина вярна и тенденциозно непълна</strong> — 4/6 верни реда, един несъществуващ, три липсващи епизода (всичките продължения). AI-таблици се проверяват, преди да се цитират.</li>
+      <li><strong>4h RSI &gt; 90 не е сигнал за обрат.</strong> Исторически е белег на много силен импулс: ден-два охлаждане (единственият измерим ефект), после по-често продължение, отколкото срив.</li>
+      <li><strong>Опашният риск е реален, но рядък</strong> — 1 от 8 случая е дал −19% за седмица. Затова той се управлява с нива и размер на позицията, не се предсказва от индикатора.</li>
+      <li><strong>Тренд-аргументът „не е бичи → по-опасно" няма опора в данните.</strong> Сегашната структура (дълбоко под върха, свеж пробив над 200-дневната, спокоен седмичен RSI) прилича повече на епизодите, завършили с продължение.</li>
+      <li><strong>8 случая за 9 години са малка извадка.</strong> Всичко тук е ориентир за контекст, не закон и не прогноза.</li>
+    </ul>
+  </section>
+
+  <footer class="fine">
+    <p>
+      Методология: Binance spot BTCUSDT, 4h затваряния, 17.08.2017 – 22.08.2026 (19 738 свещи); RSI(14) с
+      изглаждане на Wilder; епизод = свещи с RSI ≥ 90 на по-малко от 7 дни една от друга; първите 200 свещи
+      изключени (стабилизиране на индикатора); „от сигнала" = от затварянето на първата свещ ≥ 90.
+      Резултатите зависят леко от източника на данни — друга борса дава други десети. Изчисленията са
+      възпроизводими срещу публичното API на Binance.
+    </p>
+    <p>
+      Това е технически разбор с исторически статистики върху малка извадка. Не е финансов съвет,
+      не е препоръка за покупка или продажба; миналото представяне не гарантира бъдещи резултати.
+    </p>
+  </footer>
+</div>
+
+<div class="tooltip" id="tt" role="status" aria-hidden="true"></div>
+
+<script>
+(function () {
+  var episodes = ["апр ’19", "юни ’19", "апр ’20", "дек ’20", "ян ’23", "юни ’23", "окт ’23", "фев ’24"];
+  var panels = [
+    { label: "+1 ден",  vals: [6.1, -21.1, -6.6, -3.4, -1.2, -0.0, -0.2, -2.1] },
+    { label: "+7 дни",  vals: [10.8, -19.4, 0.0, -0.4, 7.5, 1.9, 0.4, 5.8] },
+    { label: "+30 дни", vals: [16.4, -29.5, 1.2, 60.5, 4.0, 0.0, 9.5, 11.9] }
+  ];
+  var VMIN = -35, VMAX = 65;
+  var W = 860, PAD_L = 46, PAD_R = 10;
+  var PANEL_H = 118, PANEL_GAP = 30, TOP = 24, XLBL = 26;
+  var H = TOP + panels.length * PANEL_H + (panels.length - 1) * PANEL_GAP + XLBL;
+  var plotW = W - PAD_L - PAD_R;
+  var slot = plotW / episodes.length;
+  var barW = Math.min(24, slot * 0.42);
+
+  function y(panelTop, v) {
+    return panelTop + (VMAX - v) / (VMAX - VMIN) * PANEL_H;
+  }
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+  function fmt(v) {
+    var s = (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1).replace(".", ",") + "%";
+    return v === 0 ? "0,0%" : s;
+  }
+  // стълб с 4px заоблен връх откъм данните, прав при нулевата линия
+  function barPath(x, v, panelTop) {
+    var y0 = y(panelTop, 0), y1 = y(panelTop, v);
+    var h = Math.abs(y0 - y1), r = Math.min(4, h, barW / 2);
+    var x2 = x + barW;
+    if (h < 0.75) { h = 0.75; }
+    if (v >= 0) {
+      var t = y0 - h;
+      return "M" + x + "," + y0 + " L" + x + "," + (t + r) + " Q" + x + "," + t + " " + (x + r) + "," + t +
+             " L" + (x2 - r) + "," + t + " Q" + x2 + "," + t + " " + x2 + "," + (t + r) + " L" + x2 + "," + y0 + " Z";
+    }
+    var b = y0 + h;
+    return "M" + x + "," + y0 + " L" + x + "," + (b - r) + " Q" + x + "," + b + " " + (x + r) + "," + b +
+           " L" + (x2 - r) + "," + b + " Q" + x2 + "," + b + " " + x2 + "," + (b - r) + " L" + x2 + "," + y0 + " Z";
+  }
+
+  var gridVals = [-20, 0, 20, 40, 60];
+  var s = [];
+  s.push('<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, system-ui, sans-serif">');
+
+  panels.forEach(function (p, pi) {
+    var pTop = TOP + pi * (PANEL_H + PANEL_GAP);
+    // мрежа
+    gridVals.forEach(function (gv) {
+      var gy = y(pTop, gv);
+      s.push('<line x1="' + PAD_L + '" y1="' + gy + '" x2="' + (W - PAD_R) + '" y2="' + gy +
+             '" stroke="' + (gv === 0 ? "var(--baseline)" : "var(--grid)") + '" stroke-width="1"/>');
+      s.push('<text x="' + (PAD_L - 7) + '" y="' + (gy + 3) + '" text-anchor="end" font-size="10"' +
+             ' font-family="IBM Plex Mono, monospace" fill="var(--muted)">' + (gv > 0 ? "+" + gv : gv) + '</text>');
+    });
+    // етикет на панела
+    s.push('<text x="' + PAD_L + '" y="' + (pTop - 9) + '" font-size="11.5" font-weight="600" fill="var(--ink-2)">' +
+           esc(p.label) + " след сигнала</text>");
+    // стълбове
+    p.vals.forEach(function (v, i) {
+      var cx = PAD_L + slot * i + (slot - barW) / 2;
+      var fill = v >= 0 ? "var(--bar-pos)" : "var(--bar-neg)";
+      s.push('<path class="bar" d="' + barPath(cx, v, pTop) + '" fill="' + fill + '" tabindex="0"' +
+             ' data-ep="' + esc(episodes[i]) + '" data-h="' + esc(p.label) + '" data-v="' + v + '">' +
+             "<title>" + esc(episodes[i] + " · " + p.label + ": " + fmt(v)) + "</title></path>");
+    });
+    // избирателни преки етикети: изключението юни ’19 + връхната точка дек ’20
+    function lbl(i, v) {
+      var lx = PAD_L + slot * i + slot / 2;
+      var ly = v >= 0 ? y(pTop, v) - 5 : y(pTop, v) + 12;
+      s.push('<text x="' + lx + '" y="' + ly + '" text-anchor="middle" font-size="10.5"' +
+             ' font-family="IBM Plex Mono, monospace" fill="var(--ink-2)">' + fmt(v) + "</text>");
+    }
+    lbl(1, p.vals[1]);
+    if (pi === 2) { lbl(3, p.vals[3]); }
+  });
+
+  // етикети по X (под последния панел)
+  var lastTop = TOP + (panels.length - 1) * (PANEL_H + PANEL_GAP);
+  episodes.forEach(function (e, i) {
+    var lx = PAD_L + slot * i + slot / 2;
+    s.push('<text x="' + lx + '" y="' + (lastTop + PANEL_H + 18) + '" text-anchor="middle" font-size="11"' +
+           ' fill="var(--muted)">' + esc(e) + "</text>");
+  });
+  s.push("</svg>");
+  document.getElementById("chart").innerHTML = s.join("");
+
+  // тултип
+  var tt = document.getElementById("tt");
+  function showTT(el, x, yPos) {
+    tt.innerHTML = "<strong>" + esc(el.getAttribute("data-ep")) + "</strong> · " + esc(el.getAttribute("data-h")) +
+                   '<br><span class="tt-v">' + fmt(parseFloat(el.getAttribute("data-v"))) + "</span> от затварянето на сигналния бар";
+    tt.style.opacity = "1";
+    tt.style.visibility = "visible";
+    tt.setAttribute("aria-hidden", "false");
+    var r = tt.getBoundingClientRect();
+    var left = Math.min(Math.max(8, x - r.width / 2), window.innerWidth - r.width - 8);
+    var top = yPos - r.height - 12;
+    if (top < 8) { top = yPos + 16; }
+    tt.style.left = left + "px";
+    tt.style.top = top + "px";
+  }
+  function hideTT() {
+    tt.style.opacity = "0";
+    tt.style.visibility = "hidden";
+    tt.setAttribute("aria-hidden", "true");
+  }
+  document.getElementById("chart").addEventListener("mousemove", function (ev) {
+    var el = ev.target.closest ? ev.target.closest(".bar") : null;
+    if (el) { showTT(el, ev.clientX, ev.clientY); } else { hideTT(); }
+  });
+  document.getElementById("chart").addEventListener("mouseleave", hideTT);
+  document.getElementById("chart").addEventListener("focusin", function (ev) {
+    var el = ev.target.closest ? ev.target.closest(".bar") : null;
+    if (el) {
+      var r = el.getBoundingClientRect();
+      showTT(el, r.left + r.width / 2, r.top);
+    }
+  });
+  document.getElementById("chart").addEventListener("focusout", hideTT);
+})();
+</script>
