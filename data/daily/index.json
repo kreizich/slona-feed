@@ -1,20 +1,7 @@
 {
-  "updated_at": "2026-11-17T07:46:08Z",
+  "updated_at": "2026-11-18T07:13:44Z",
   "days": 90,
   "entries": [
-    {
-      "date": "2026-08-19",
-      "BTCUSDT_close": "69327.55000000",
-      "BTCUSDT_change_pct": 7.0882,
-      "ETHUSDT_close": "2252.84000000",
-      "ETHUSDT_change_pct": 17.4516,
-      "SOLUSDT_close": "85.35000000",
-      "SOLUSDT_change_pct": 10.7435,
-      "XRPUSDT_close": "1.10140000",
-      "XRPUSDT_change_pct": 10.151,
-      "BNBUSDT_close": "627.12000000",
-      "BNBUSDT_change_pct": 3.845
-    },
     {
       "date": "2026-08-20",
       "BTCUSDT_close": "73028.52000000",
@@ -1171,6 +1158,19 @@
       "XRPUSDT_change_pct": -1.9095,
       "BNBUSDT_close": "591.60000000",
       "BNBUSDT_change_pct": -0.9858
+    },
+    {
+      "date": "2026-11-17",
+      "BTCUSDT_close": "64940.18000000",
+      "BTCUSDT_change_pct": 0.0649,
+      "ETHUSDT_close": "1824.34000000",
+      "ETHUSDT_change_pct": 0.1229,
+      "SOLUSDT_close": "75.16000000",
+      "SOLUSDT_change_pct": 4.9867,
+      "XRPUSDT_close": "0.98380000",
+      "XRPUSDT_change_pct": 2.951,
+      "BNBUSDT_close": "596.33000000",
+      "BNBUSDT_change_pct": 0.9668
     }
   ]
 }
